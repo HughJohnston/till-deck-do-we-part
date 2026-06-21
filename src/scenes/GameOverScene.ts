@@ -3,7 +3,7 @@ import { FONT_FAMILY } from '../config/gameConfig';
 import { createMuteButton } from '../ui/MuteButton';
 import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
-import { createButton } from '../ui/Button';
+import { UiButton, createButton } from '../ui/Button';
 import { hasSeenInterstitial, isUnlocked, unlockHoneymoon } from '../services/HoneymoonProgressService';
 import { GameMode } from './GameScene';
 
@@ -24,14 +24,13 @@ function saveTopScore(score: number) {
   try { localStorage.setItem('tilldeck_topscore', String(score)); } catch { /* */ }
 }
 
-function getSpouseDisplayName(character: string): string {
-  return character === 'ruth' ? 'RUTH' : 'WILF';
-}
-
 export class GameOverScene extends Phaser.Scene {
   private ticketIcon?: Phaser.GameObjects.Image;
   private gameOverData!: GameOverData;
   private unlockKeyHandler?: (event: KeyboardEvent) => void;
+  private selectedCharacter: 'wilf' | 'ruth' = 'wilf';
+  private wilfToggleBtn?: UiButton;
+  private ruthToggleBtn?: UiButton;
 
   constructor() {
     super('GameOverScene');
@@ -66,8 +65,11 @@ export class GameOverScene extends Phaser.Scene {
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));
 
+    this.selectedCharacter = character === 'ruth' ? 'ruth' : 'wilf';
+    this.registry.set('character', this.selectedCharacter);
+
     const gameOverData: GameOverData = {
-      score, scoreLabel, character, playerName, gameMode, skipTicketOnce,
+      score, scoreLabel, character: this.selectedCharacter, playerName, gameMode, skipTicketOnce,
     };
     this.gameOverData = gameOverData;
 
@@ -116,26 +118,28 @@ export class GameOverScene extends Phaser.Scene {
     const btnW = Phaser.Math.Clamp(Math.round(w * 0.56), 180, 260);
     const btnGap = Phaser.Math.Clamp(Math.round(base * 0.018), 10, 16);
     const btnStep = btnH + btnGap;
-    const playAgainY = h * 0.62;
-    const spouseSelectorY = playAgainY + btnStep;
-    const leaderboardY = spouseSelectorY + btnStep;
+    const spouseToggleY = h * 0.62;
+    const circleBackY = spouseToggleY + btnStep;
+    const leaderboardY = circleBackY + btnStep;
     const mainMenuY = leaderboardY + btnStep;
 
-    createButton(this, {
-      x: cx, y: playAgainY, width: btnW, height: btnH,
-      label: 'PLAY AGAIN', variant: 'primary', fontSize: fontBtn,
-      onClick: () => this.scene.start('GameScene'),
+    const toggleGap = 6;
+    const halfW = (btnW - toggleGap) / 2;
+    this.wilfToggleBtn = createButton(this, {
+      x: cx - halfW / 2 - toggleGap / 2, y: spouseToggleY, width: halfW, height: btnH,
+      label: 'WILF', variant: this.selectedCharacter === 'wilf' ? 'secondary' : 'tertiary', fontSize: fontBtn,
+      onClick: () => this.selectSpouse('wilf'),
+    });
+    this.ruthToggleBtn = createButton(this, {
+      x: cx + halfW / 2 + toggleGap / 2, y: spouseToggleY, width: halfW, height: btnH,
+      label: 'RUTH', variant: this.selectedCharacter === 'ruth' ? 'secondary' : 'tertiary', fontSize: fontBtn,
+      onClick: () => this.selectSpouse('ruth'),
     });
 
     createButton(this, {
-      x: cx, y: spouseSelectorY, width: btnW, height: btnH,
-      label: `SPOUSE SELECTOR: ${getSpouseDisplayName(character)}`, variant: 'secondary', fontSize: fontBtn,
-      onClick: () => {
-        this.scene.start('MenuScene', {
-          mode: 'character',
-          returnTo: { scene: 'GameOverScene', data: this.gameOverData },
-        });
-      },
+      x: cx, y: circleBackY, width: btnW, height: btnH,
+      label: 'CIRCLE BACK', variant: 'primary', fontSize: fontBtn,
+      onClick: () => this.scene.start('GameScene'),
     });
 
     const lbButton = createButton(this, {
@@ -177,6 +181,19 @@ export class GameOverScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.unlockKeyHandler) this.input.keyboard?.off('keydown-U', this.unlockKeyHandler);
     });
+  }
+
+  private selectSpouse(character: 'wilf' | 'ruth') {
+    if (this.selectedCharacter === character) return;
+    this.selectedCharacter = character;
+    this.registry.set('character', character);
+    this.gameOverData = { ...this.gameOverData, character };
+    this.updateSpouseToggle();
+  }
+
+  private updateSpouseToggle() {
+    this.wilfToggleBtn?.setVariant(this.selectedCharacter === 'wilf' ? 'secondary' : 'tertiary');
+    this.ruthToggleBtn?.setVariant(this.selectedCharacter === 'ruth' ? 'secondary' : 'tertiary');
   }
 
   private addTicketIcon() {

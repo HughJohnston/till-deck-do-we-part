@@ -118,6 +118,12 @@ export class UiButton {
     return this;
   }
 
+  setVariant(variant: ButtonVariant): this {
+    this.variant = variant;
+    this.applyStyle();
+    return this;
+  }
+
   setOnClick(fn: () => void): this {
     this.onClick = fn;
     return this;

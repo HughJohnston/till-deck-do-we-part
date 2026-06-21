@@ -110,20 +110,20 @@ export class HoneymoonInterstitialScene extends Phaser.Scene {
 
     const total = getTotalSlides();
     const toGo = getSlidesToGo();
-    const statY = titleY + 36;
-
-    this.add.text(cx - panelW * 0.22, statY, `${formatSlides(total)}\nSLIDES MADE`, {
-      fontSize: `${fontStat}px`, color: '#ffffff', fontFamily: FONT_FAMILY, align: 'center', lineSpacing: 4,
-    }).setOrigin(0.5);
-
-    this.add.text(cx + panelW * 0.22, statY, `${formatSlides(toGo)}\nTO GO`, {
-      fontSize: `${fontStat}px`, color: '#ffffff', fontFamily: FONT_FAMILY, align: 'center', lineSpacing: 4,
-    }).setOrigin(0.5);
 
     const barW = panelW * 0.75;
     const barH = 14;
-    const barY = statY + 44;
+    const barY = titleY + 36;
     const barLeft = cx - barW / 2;
+    const statY = barY + barH / 2 + 10;
+
+    this.add.text(barLeft, statY, `${formatSlides(total)}\nSLIDES MADE`, {
+      fontSize: `${fontStat}px`, color: '#ffffff', fontFamily: FONT_FAMILY, align: 'left', lineSpacing: 4,
+    }).setOrigin(0, 0);
+
+    this.add.text(barLeft + barW, statY, `${formatSlides(toGo)}\nTO GO`, {
+      fontSize: `${fontStat}px`, color: '#ffffff', fontFamily: FONT_FAMILY, align: 'right', lineSpacing: 4,
+    }).setOrigin(1, 0);
     const threshold = difficultyConfig.honeymoonUnlockThreshold;
     const progress = Math.min(1, total / threshold);
 
