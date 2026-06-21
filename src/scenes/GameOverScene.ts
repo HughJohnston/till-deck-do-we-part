@@ -4,7 +4,8 @@ import { createMuteButton } from '../ui/MuteButton';
 import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
 import { UiButton, createButton } from '../ui/Button';
-import { hasSeenInterstitial, isUnlocked, unlockHoneymoon } from '../services/HoneymoonProgressService';
+import { hasSeenInterstitial, isUnlocked, unlockHoneymoon, getTotalSlides, formatSlides } from '../services/HoneymoonProgressService';
+import { fetchPlayerRank } from '../services/LeaderboardService';
 import { GameMode } from './GameScene';
 
 export interface GameOverData {
@@ -13,7 +14,6 @@ export interface GameOverData {
   character: string;
   playerName: string;
   gameMode?: GameMode;
-  skipTicketOnce?: boolean;
 }
 
 function getTopScore(): number {
@@ -31,6 +31,8 @@ export class GameOverScene extends Phaser.Scene {
   private selectedCharacter: 'wilf' | 'ruth' = 'wilf';
   private wilfToggleBtn?: UiButton;
   private ruthToggleBtn?: UiButton;
+  private rankText?: Phaser.GameObjects.Text;
+  private rankFetchGeneration = 0;
 
   constructor() {
     super('GameOverScene');
@@ -42,7 +44,6 @@ export class GameOverScene extends Phaser.Scene {
     this.data.set('character', data.character);
     this.data.set('playerName', data.playerName);
     this.data.set('gameMode', data.gameMode ?? 'normal');
-    this.data.set('skipTicketOnce', data.skipTicketOnce ?? false);
   }
 
   create() {
@@ -55,12 +56,9 @@ export class GameOverScene extends Phaser.Scene {
     const character = this.data.get('character') as string;
     const playerName = this.data.get('playerName') as string;
     const gameMode = (this.data.get('gameMode') as GameMode) ?? 'normal';
-    const skipTicketOnce = this.data.get('skipTicketOnce') as boolean;
 
     const previousTop = getTopScore();
-    const isNewRecord = score > previousTop;
-    if (isNewRecord) saveTopScore(score);
-    const topScore = Math.max(score, previousTop);
+    if (score > previousTop) saveTopScore(score);
 
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));
@@ -69,11 +67,11 @@ export class GameOverScene extends Phaser.Scene {
     this.registry.set('character', this.selectedCharacter);
 
     const gameOverData: GameOverData = {
-      score, scoreLabel, character: this.selectedCharacter, playerName, gameMode, skipTicketOnce,
+      score, scoreLabel, character: this.selectedCharacter, playerName, gameMode,
     };
     this.gameOverData = gameOverData;
 
-    if (hasSeenInterstitial() && !skipTicketOnce) {
+    if (hasSeenInterstitial()) {
       this.addTicketIcon();
     }
 
@@ -108,9 +106,21 @@ export class GameOverScene extends Phaser.Scene {
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
-    this.add.text(cx, scoreY + numberSize / 2 + 24, `${isNewRecord ? 'NEW BEST! ' : 'Best: '}${topScore}`, {
-      fontSize: '18px', color: isNewRecord ? '#FFD700' : '#aaaacc', fontFamily: FONT_FAMILY,
-    }).setOrigin(0.5);
+    const statsY = scoreY + numberSize / 2 + 24;
+    const statsWidth = w * 0.8;
+    const statsLeft = cx - statsWidth / 2;
+    const statsRight = cx + statsWidth / 2;
+    const statsFont = '14px';
+
+    this.rankText = this.add.text(statsLeft, statsY, 'Rank …', {
+      fontSize: statsFont, color: '#aaaacc', fontFamily: FONT_FAMILY,
+    }).setOrigin(0, 0.5);
+
+    this.add.text(statsRight, statsY, `${formatSlides(getTotalSlides())} slides total`, {
+      fontSize: statsFont, color: '#aaaacc', fontFamily: FONT_FAMILY,
+    }).setOrigin(1, 0.5);
+
+    this.loadPlayerRank(playerName.trim());
 
     const base = Math.min(w, h);
     const fontBtn = Phaser.Math.Clamp(Math.round(base * 0.048), 16, 24);
@@ -180,6 +190,14 @@ export class GameOverScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-U', this.unlockKeyHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.unlockKeyHandler) this.input.keyboard?.off('keydown-U', this.unlockKeyHandler);
+    });
+  }
+
+  private loadPlayerRank(playerName: string) {
+    const generation = ++this.rankFetchGeneration;
+    void fetchPlayerRank(playerName).then((rank) => {
+      if (generation !== this.rankFetchGeneration || !this.rankText?.active) return;
+      this.rankText.setText(rank != null ? `Rank #${rank}` : 'Rank —');
     });
   }
 

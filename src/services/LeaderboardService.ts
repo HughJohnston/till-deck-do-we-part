@@ -67,6 +67,16 @@ export async function fetchTopScores(limit = 100): Promise<LeaderboardEntry[]> {
   }
 }
 
+export async function fetchPlayerRank(playerName: string): Promise<number | null> {
+  const name = playerName.trim();
+  if (!name || !leaderboardEnabled) return null;
+
+  const entries = await fetchTopScores();
+  const key = name.toLowerCase();
+  const index = entries.findIndex((entry) => (entry.name ?? '').trim().toLowerCase() === key);
+  return index >= 0 ? index + 1 : null;
+}
+
 function dedupeDisplayRows(rows: LeaderboardEntry[]): LeaderboardEntry[] {
   const seen = new Set<string>();
   return rows.filter((row) => {

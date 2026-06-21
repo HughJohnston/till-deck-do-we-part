@@ -4,7 +4,14 @@ import {
   playGoodImages, playBadImages,
   synergyLetters,
 } from '../config/assetManifest';
-import { getGroundY } from '../utils/constants';
+import {
+  getGroundY,
+  COLLECTABLE_Y_JUMP_MIN,
+  COLLECTABLE_Y_JUMP_MAX,
+  COLLECTABLE_Y_DOUBLE_JUMP_MIN,
+  COLLECTABLE_Y_DOUBLE_JUMP_MAX,
+} from '../utils/constants';
+import { difficultyConfig } from '../config/difficultyConfig';
 import { DifficultyManager } from './DifficultyManager';
 
 export class SpawnManager {
@@ -32,6 +39,11 @@ export class SpawnManager {
     this.collectables = scene.physics.add.group({ allowGravity: false });
     this.synergyGroup = scene.physics.add.group({ allowGravity: false });
     this.platforms = scene.physics.add.group({ allowGravity: false, immovable: true });
+    this.primeObstacleTimer();
+  }
+
+  private primeObstacleTimer() {
+    this.obstacleTimer = difficultyConfig.obstacleSpawnMax - difficultyConfig.obstacleFirstSpawnDelay;
   }
 
   setHoneymoonMode(enabled: boolean) {
@@ -114,13 +126,20 @@ export class SpawnManager {
     (obj as any).assetKey = def.key;
   }
 
+  private spawnCollectableY(defHeight: number): number {
+    const tier = Phaser.Math.Between(0, 2);
+    if (tier === 0) return this.groundY - defHeight / 2;
+    if (tier === 1) {
+      return this.groundY - Phaser.Math.Between(COLLECTABLE_Y_JUMP_MIN, COLLECTABLE_Y_JUMP_MAX);
+    }
+    return this.groundY - Phaser.Math.Between(COLLECTABLE_Y_DOUBLE_JUMP_MIN, COLLECTABLE_Y_DOUBLE_JUMP_MAX);
+  }
+
   private spawnCollectable(speed: number) {
     const pool = this.collectablePool;
     const def = Phaser.Utils.Array.GetRandom(pool);
     const x = this.w + def.width;
-    const minY = this.groundY - 120;
-    const maxY = this.groundY - def.height / 2;
-    const y = Phaser.Math.Between(minY, maxY);
+    const y = this.spawnCollectableY(def.height);
     if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
     const obj = this.collectables.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
@@ -178,7 +197,7 @@ export class SpawnManager {
     this.collectables.clear(true, true);
     this.synergyGroup.clear(true, true);
     this.platforms.clear(true, true);
-    this.obstacleTimer = 0;
+    this.primeObstacleTimer();
     this.collectableTimer = 0;
     this.synergyTimer = 0;
     this.platformTimer = 0;

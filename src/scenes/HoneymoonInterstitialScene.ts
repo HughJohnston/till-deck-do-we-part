@@ -190,7 +190,7 @@ export class HoneymoonInterstitialScene extends Phaser.Scene {
   private dismissToGameOver() {
     if (!this.fromGameOver) {
       markInterstitialSeen();
-      this.scene.start('GameOverScene', { ...this.gameOverData, skipTicketOnce: true });
+      this.scene.start('GameOverScene', { ...this.gameOverData });
     } else {
       this.scene.start('GameOverScene', this.gameOverData);
     }

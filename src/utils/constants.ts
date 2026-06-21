@@ -15,3 +15,8 @@ export function getPlayerX(w: number): number {
 
 export const JUMP_VELOCITY = -700;
 export const PLAYER_SIZE = 192;
+
+export const COLLECTABLE_Y_JUMP_MIN = 200;
+export const COLLECTABLE_Y_JUMP_MAX = 240;
+export const COLLECTABLE_Y_DOUBLE_JUMP_MIN = 300;
+export const COLLECTABLE_Y_DOUBLE_JUMP_MAX = 360;
