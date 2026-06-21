@@ -7,6 +7,7 @@ import { GameScene } from '../scenes/GameScene';
 import { HudScene } from '../scenes/HudScene';
 import { GameOverScene } from '../scenes/GameOverScene';
 import { LeaderboardScene } from '../scenes/LeaderboardScene';
+import { HoneymoonInterstitialScene } from '../scenes/HoneymoonInterstitialScene';
 import { AudioConsoleScene } from '../ui/AudioConsole';
 
 export const FONT_FAMILY = 'Minecraft, monospace';
@@ -29,7 +30,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, PreloadScene, MenuScene, IntroScene, GameScene, HudScene, GameOverScene, LeaderboardScene, AudioConsoleScene],
+  scene: [BootScene, PreloadScene, MenuScene, IntroScene, GameScene, HudScene, GameOverScene, HoneymoonInterstitialScene, LeaderboardScene, AudioConsoleScene],
   // Phaser drives the loop off requestAnimationFrame (matches the display, usually
   // 60Hz). target/min keep the simulation timestep stable so motion stays smooth
   // and degrades gracefully if a frame is slow rather than lurching.

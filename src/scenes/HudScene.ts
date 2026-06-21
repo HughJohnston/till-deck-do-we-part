@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { FONT_FAMILY } from '../config/gameConfig';
+import { GameScene } from './GameScene';
 
 // The score climbs every frame, but re-rasterizing the Text to a GPU texture
 // 60x/sec is a real per-frame cost on mobile. Refreshing ~12x/sec is visually
@@ -71,8 +72,9 @@ export class HudScene extends Phaser.Scene {
       for (const l of this.synergyLetters) l.setTint(0x555555);
     });
 
-    this.gameScene.events.on('honeymoon-activated', () => {
+    const gs = this.gameScene as GameScene;
+    if (gs.scoreManager?.isHoneymoonMode) {
       this.scoreText.setColor('#FF8844');
-    });
+    }
   }
 }

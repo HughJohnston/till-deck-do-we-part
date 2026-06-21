@@ -5,12 +5,16 @@ import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
 import { createButton } from '../ui/Button';
 import { submitScore } from '../services/LeaderboardService';
+import { hasSeenInterstitial, isUnlocked, unlockHoneymoon } from '../services/HoneymoonProgressService';
+import { GameMode } from './GameScene';
 
 export interface GameOverData {
   score: number;
   scoreLabel: string;
   character: string;
   playerName: string;
+  gameMode?: GameMode;
+  showTicket?: boolean;
 }
 
 function getTopScore(): number {
@@ -22,6 +26,10 @@ function saveTopScore(score: number) {
 }
 
 export class GameOverScene extends Phaser.Scene {
+  private ticketIcon?: Phaser.GameObjects.Image;
+  private gameOverData!: GameOverData;
+  private unlockKeyHandler?: (event: KeyboardEvent) => void;
+
   constructor() {
     super('GameOverScene');
   }
@@ -31,6 +39,8 @@ export class GameOverScene extends Phaser.Scene {
     this.data.set('scoreLabel', data.scoreLabel);
     this.data.set('character', data.character);
     this.data.set('playerName', data.playerName);
+    this.data.set('gameMode', data.gameMode ?? 'normal');
+    this.data.set('showTicket', data.showTicket ?? false);
   }
 
   create() {
@@ -42,19 +52,25 @@ export class GameOverScene extends Phaser.Scene {
     const scoreLabel = this.data.get('scoreLabel') as string;
     const character = this.data.get('character') as string;
     const playerName = this.data.get('playerName') as string;
+    const gameMode = (this.data.get('gameMode') as GameMode) ?? 'normal';
+    const showTicket = this.data.get('showTicket') as boolean;
 
     const previousTop = getTopScore();
     const isNewRecord = score > previousTop;
     if (isNewRecord) saveTopScore(score);
     const topScore = Math.max(score, previousTop);
 
-    // Save this run to the global leaderboard (fire-and-forget; never blocks UI).
     submitScore({ name: playerName, score, character });
 
-    // Faded home backdrop, cover-scaled from the texture's real size (keeps
-    // aspect, no letterbox bars regardless of the source image dimensions).
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));
+
+    const gameOverData: GameOverData = { score, scoreLabel, character, playerName, gameMode };
+    this.gameOverData = gameOverData;
+
+    if (showTicket && hasSeenInterstitial()) {
+      this.addTicketIcon();
+    }
 
     this.add.text(cx, h * 0.13, 'GAME OVER', {
       fontSize: '28px', color: '#FF4444', fontFamily: FONT_FAMILY,
@@ -67,7 +83,6 @@ export class GameOverScene extends Phaser.Scene {
     const numberSize = Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.12), 40, 80);
     const scoreY = h * 0.42;
 
-    // Small label sits just above the large, bold score number.
     this.add.text(cx, scoreY - numberSize / 2 - 12, scoreLabel, {
       fontSize: '14px', color: '#aaaacc', fontFamily: FONT_FAMILY,
     }).setOrigin(0.5);
@@ -84,8 +99,6 @@ export class GameOverScene extends Phaser.Scene {
     const base = Math.min(w, h);
     const fontBtn = Phaser.Math.Clamp(Math.round(base * 0.048), 16, 24);
     const btnH = Phaser.Math.Clamp(Math.round(base * 0.06), 38, 50);
-    // Wider than the menu buttons so the centered LEADERBOARD label clears the
-    // trophy icon pinned to the left edge.
     const btnW = Phaser.Math.Clamp(Math.round(w * 0.56), 180, 260);
 
     createButton(this, {
@@ -101,15 +114,12 @@ export class GameOverScene extends Phaser.Scene {
     });
 
     const lbY = h * 0.82;
-    const leaderboardData: GameOverData = { score, scoreLabel, character, playerName };
     const lbButton = createButton(this, {
       x: cx, y: lbY, width: btnW, height: btnH,
       label: 'LEADERBOARD', variant: 'secondary', fontSize: fontBtn,
-      onClick: () => this.scene.start('LeaderboardScene', leaderboardData),
+      onClick: () => this.scene.start('LeaderboardScene', gameOverData),
     });
 
-    // Treat [trophy][gap][label] as one group and centre it in the button, so
-    // the trophy never overlaps the text regardless of label/button width.
     if (this.textures.exists('ui-trophy')) {
       const trophy = this.add.image(0, lbY, 'ui-trophy').setOrigin(0.5);
       trophy.setScale((btnH * 0.62) / trophy.height);
@@ -122,5 +132,35 @@ export class GameOverScene extends Phaser.Scene {
     createMuteButton(this);
     registerUiSound(this);
     registerAudioConsole(this);
+
+    this.unlockKeyHandler = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'u') return;
+      if (isUnlocked()) return;
+      unlockHoneymoon();
+      if (this.ticketIcon) {
+        this.ticketIcon.setTexture('honeymoon-unlocked');
+      } else if (hasSeenInterstitial()) {
+        this.addTicketIcon();
+      }
+    };
+    this.input.keyboard?.on('keydown-U', this.unlockKeyHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.unlockKeyHandler) this.input.keyboard?.off('keydown-U', this.unlockKeyHandler);
+    });
+  }
+
+  private addTicketIcon() {
+    const ticketKey = isUnlocked() ? 'honeymoon-unlocked' : 'honeymoon-locked';
+    if (!this.textures.exists(ticketKey)) return;
+
+    const iconH = 52;
+    this.ticketIcon = this.add.image(36, 36, ticketKey).setOrigin(0, 0);
+    this.ticketIcon.setDisplaySize(iconH * (700 / 550), iconH);
+    this.ticketIcon.setInteractive({ useHandCursor: true });
+    this.ticketIcon.setDepth(10);
+
+    this.ticketIcon.on('pointerdown', () => {
+      this.scene.start('HoneymoonInterstitialScene', { gameOverData: this.gameOverData, fromGameOver: true });
+    });
   }
 }

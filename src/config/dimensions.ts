@@ -11,6 +11,9 @@ export const BG_TEXTURE_HEIGHTS = {
   sky: 172,
   street: 400,
   ground: 250,
+  honeymoonSky: 132,
+  honeymoonShore: 79,
+  honeymoonSand: 86,
 } as const;
 
 // Tunable environment layout. The datum is the running surface line.
@@ -19,6 +22,7 @@ export const ENV_LAYOUT = {
   datumRatio: 0.815,
   streetBandRatio: 0.55,
   skyBandRatio: 0.67,
+  honeymoonStreetBandRatio: 0.18,
   scroll: {
     sky: 0.1,
     street: 0.9,

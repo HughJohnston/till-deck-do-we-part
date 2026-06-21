@@ -10,6 +10,7 @@ import { getAudioVolume } from './AudioConsole';
 const TRACKS: Record<string, string> = {
   'menu-bgm': 'assets/audio/music/Wedding March Chiptune 8 Bit.mp3',
   bgm: 'assets/audio/music/All Star - 8B.mp3',
+  'honeymoon-bgm': 'assets/audio/music/Crashed the wedding 8 bit.mp3',
 };
 
 let el: HTMLAudioElement | null = null;

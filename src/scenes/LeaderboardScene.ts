@@ -20,8 +20,10 @@ export class LeaderboardScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private backButton!: UiButton;
 
+  private viewportContainer?: Phaser.GameObjects.Container;
   private listContainer?: Phaser.GameObjects.Container;
   private maskGfx?: Phaser.GameObjects.Graphics;
+  private listMask?: Phaser.Display.Masks.GeometryMask;
 
   // Scroll state / current viewport geometry.
   private scrollY = 0;
@@ -80,6 +82,7 @@ export class LeaderboardScene extends Phaser.Scene {
     });
 
     this.setupScrollInput();
+    this.maskGfx = this.add.graphics().setVisible(false);
     this.relayout();
 
     createMuteButton(this);
@@ -90,6 +93,7 @@ export class LeaderboardScene extends Phaser.Scene {
     this.scale.on('resize', this.resizeHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.resizeHandler) this.scale.off('resize', this.resizeHandler);
+      this.maskGfx?.destroy();
     });
 
     fetchTopScores(100).then((rows) => {
@@ -127,7 +131,11 @@ export class LeaderboardScene extends Phaser.Scene {
 
   private applyScroll(value: number) {
     this.scrollY = Phaser.Math.Clamp(value, 0, this.maxScroll);
-    if (this.listContainer) this.listContainer.y = this.viewTop - this.scrollY;
+    if (this.listContainer) this.listContainer.y = -this.scrollY;
+  }
+
+  private getPlayerName(): string {
+    return (this.returnData?.playerName ?? (this.registry.get('playerName') as string) ?? '').trim();
   }
 
   private relayout() {
@@ -143,27 +151,38 @@ export class LeaderboardScene extends Phaser.Scene {
 
     this.listWidth = Math.min(w * 0.9, 520);
     this.listLeft = cx - this.listWidth / 2;
-    this.viewTop = h * 0.2;
-    const viewBottom = h * 0.84;
-    this.viewHeight = Math.max(60, viewBottom - this.viewTop);
-    this.rowHeight = Phaser.Math.Clamp(Math.round(base * 0.07), 30, 48);
-
-    this.panel.setPosition(cx, this.viewTop + this.viewHeight / 2)
-      .setSize(this.listWidth, this.viewHeight);
 
     const btnH = Phaser.Math.Clamp(Math.round(base * 0.06), 38, 50);
     const btnW = Phaser.Math.Clamp(Math.round(w * 0.42), 140, 200);
     const fontBtn = Phaser.Math.Clamp(Math.round(base * 0.048), 16, 24);
     this.backButton.setPosition(cx, h * 0.92).setSize(btnW, btnH).setFontSize(fontBtn);
 
+    const backTop = h * 0.92 - btnH / 2;
+    this.viewTop = h * 0.18;
+    this.viewHeight = Math.max(60, backTop - this.viewTop - 16);
+
+    this.rowHeight = Phaser.Math.Clamp(Math.round(base * 0.07), 30, 48);
+
+    this.panel.setPosition(cx, this.viewTop + this.viewHeight / 2)
+      .setSize(this.listWidth, this.viewHeight);
+
     this.buildList();
   }
 
+  private updateListMask() {
+    if (!this.maskGfx) return;
+    this.maskGfx.clear();
+    this.maskGfx.fillStyle(0xffffff);
+    this.maskGfx.fillRect(this.listLeft, this.viewTop, this.listWidth, this.viewHeight);
+    if (!this.listMask) this.listMask = this.maskGfx.createGeometryMask();
+  }
+
   private buildList() {
-    this.listContainer?.destroy();
+    this.viewportContainer?.destroy();
+    this.viewportContainer = undefined;
     this.listContainer = undefined;
-    this.maskGfx?.destroy();
-    this.maskGfx = undefined;
+
+    this.updateListMask();
 
     if (!this.loaded) {
       this.statusText.setText('Loading...').setVisible(true)
@@ -183,20 +202,24 @@ export class LeaderboardScene extends Phaser.Scene {
     const base = Math.min(this.scale.width, this.scale.height);
     const fontSize = Phaser.Math.Clamp(Math.round(base * 0.035), 13, 20);
     const pad = Math.max(10, this.listWidth * 0.04);
-    const rankX = this.listLeft + pad;
-    const nameX = this.listLeft + pad + this.listWidth * 0.16;
-    const scoreX = this.listLeft + this.listWidth - pad;
+    const rankX = pad;
+    const nameX = pad + this.listWidth * 0.16;
+    const scoreX = this.listWidth - pad;
+    const playerName = this.getPlayerName();
 
-    const container = this.add.container(0, this.viewTop);
+    const viewport = this.add.container(this.listLeft, this.viewTop).setDepth(6);
+    const list = this.add.container(0, 0);
+    viewport.add(list);
 
     this.entries.forEach((entry, i) => {
       const rowY = i * this.rowHeight + this.rowHeight / 2;
       const isTop = i === 0;
+      const isSelf = playerName.length > 0 && (entry.name ?? '').trim() === playerName;
 
       if (i % 2 === 1) {
-        container.add(
+        list.add(
           this.add.rectangle(
-            this.listLeft + this.listWidth / 2, rowY,
+            this.listWidth / 2, rowY,
             this.listWidth, this.rowHeight, 0xffffff, 0.05,
           ),
         );
@@ -205,46 +228,48 @@ export class LeaderboardScene extends Phaser.Scene {
       const rankText = this.add.text(rankX, rowY, `${i + 1}`, {
         fontSize: `${fontSize}px`, color: isTop ? GOLD : '#aaaacc', fontFamily: FONT_FAMILY,
       }).setOrigin(0, 0.5);
-      container.add(rankText);
+      list.add(rankText);
 
       let labelX = nameX;
       if (isTop && this.textures.exists('ui-trophy')) {
         const trophy = this.add.image(nameX, rowY, 'ui-trophy').setOrigin(0, 0.5);
         trophy.setScale((this.rowHeight * 0.7) / trophy.height);
-        container.add(trophy);
+        list.add(trophy);
         labelX = nameX + trophy.displayWidth + 8;
       }
 
-      const nameText = this.add.text(labelX, rowY, entry.name ?? '???', {
+      const rawName = entry.name ?? '???';
+      const displayName = isSelf ? `★ ${rawName}` : rawName;
+      const nameText = this.add.text(labelX, rowY, displayName, {
         fontSize: `${fontSize}px`,
-        color: isTop ? GOLD : '#ffffff',
+        color: isTop ? GOLD : isSelf ? GOLD : '#ffffff',
         fontFamily: FONT_FAMILY,
-        fontStyle: isTop ? 'bold' : 'normal',
+        fontStyle: isTop || isSelf ? 'bold' : 'normal',
       }).setOrigin(0, 0.5);
       // Keep the name from overlapping the score column.
       const maxNameWidth = scoreX - labelX - this.listWidth * 0.18;
-      if (nameText.width > maxNameWidth) nameText.setText(this.truncate(entry.name ?? '???', maxNameWidth, fontSize));
-      container.add(nameText);
+      if (nameText.width > maxNameWidth) nameText.setText(this.truncate(displayName, maxNameWidth, fontSize));
+      list.add(nameText);
 
       const scoreText = this.add.text(scoreX, rowY, `${Math.floor(entry.score)}`, {
-        fontSize: `${fontSize}px`, color: isTop ? GOLD : '#ffffff', fontFamily: FONT_FAMILY,
+        fontSize: `${fontSize}px`, color: isTop ? GOLD : isSelf ? GOLD : '#ffffff', fontFamily: FONT_FAMILY,
         fontStyle: 'bold',
       }).setOrigin(1, 0.5);
-      container.add(scoreText);
+      list.add(scoreText);
     });
 
-    // Clip the list to the viewport with a geometry mask.
-    const gfx = this.make.graphics({ x: 0, y: 0 });
-    gfx.fillStyle(0xffffff);
-    gfx.fillRect(this.listLeft, this.viewTop, this.listWidth, this.viewHeight);
-    container.setMask(gfx.createGeometryMask());
+    if (this.listMask) viewport.setMask(this.listMask);
 
-    this.listContainer = container;
-    this.maskGfx = gfx;
+    this.viewportContainer = viewport;
+    this.listContainer = list;
 
     const contentHeight = this.entries.length * this.rowHeight;
     this.maxScroll = Math.max(0, contentHeight - this.viewHeight);
-    this.applyScroll(this.scrollY);
+    this.applyScroll(Phaser.Math.Clamp(this.scrollY, 0, this.maxScroll));
+
+    this.panel.setDepth(5);
+    this.backButton.rect.setDepth(20);
+    this.backButton.text.setDepth(20);
   }
 
   private truncate(text: string, maxWidth: number, fontSize: number): string {

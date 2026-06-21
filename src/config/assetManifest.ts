@@ -105,6 +105,9 @@ export const backgroundImages: ImageDef[] = [
   { key: 'bg-wingfield', path: 'assets/backgrounds/bg_wingfield.png', width: 1600, height: 400 },
   { key: 'bg-pubs', path: 'assets/backgrounds/bg_pubs.png', width: 1134, height: 400 },
   { key: 'bg-ryelane2', path: 'assets/backgrounds/bg_ryelane2.png', width: 978, height: 400 },
+  { key: 'bg-honeymoon-sky', path: 'assets/backgrounds/Honeymoon mode/SKY.png', width: 516, height: 132 },
+  { key: 'bg-honeymoon-shore', path: 'assets/backgrounds/Honeymoon mode/SHORE.png', width: 516, height: 79 },
+  { key: 'bg-honeymoon-sand', path: 'assets/backgrounds/Honeymoon mode/BEACH.png', width: 276, height: 86 },
 ];
 
 export const uiImages: ImageDef[] = [
@@ -113,6 +116,8 @@ export const uiImages: ImageDef[] = [
   { key: 'ui-card', path: 'assets/ui/card.png', width: 600, height: 350 },
   { key: 'ui-charframe', path: 'assets/ui/charframe.png', width: 100, height: 120 },
   { key: 'ui-trophy', path: 'assets/ui/trophy.png', width: 64, height: 64 },
+  { key: 'honeymoon-locked', path: 'assets/ui/honeymoon tickets/honeymoon_locked.png', width: 700, height: 550 },
+  { key: 'honeymoon-unlocked', path: 'assets/ui/honeymoon tickets/honeymoon_unlocked.png', width: 700, height: 550 },
 ];
 
 export const menuImages: ImageDef[] = [

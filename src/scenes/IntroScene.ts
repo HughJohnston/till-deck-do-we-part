@@ -17,7 +17,7 @@ const STORY_CARDS: StoryCard[] = [
   { image: 'comic-3', text: 'Help them finish their deck!' },
   { image: 'comic-4', text: 'Collect productivity boosts!' },
   { image: 'comic-5', text: 'Dodge distractions' },
-  { image: 'comic-6', text: 'Make 100,000 slides = unlock honeymoon' },
+  { image: 'comic-6', text: 'Make 10,000 slides = unlock honeymoon' },
 ];
 
 export class IntroScene extends Phaser.Scene {

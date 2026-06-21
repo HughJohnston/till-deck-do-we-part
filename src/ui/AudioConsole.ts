@@ -1,14 +1,15 @@
 import Phaser from 'phaser';
 
 const AUDIO_DEFAULTS: { key: string; volume: number }[] = [
-  { key: 'bgm', volume: 0.14 },
-  { key: 'menu-bgm', volume: 0.05 },
-  { key: 'sfx-jump', volume: 0.55 },
-  { key: 'sfx-run', volume: 0.70 },
+  { key: 'bgm', volume: 0.45 },
+  { key: 'menu-bgm', volume: 0.03 },
+  { key: 'honeymoon-bgm', volume: 0.30 },
+  { key: 'sfx-jump', volume: 0.40 },
+  { key: 'sfx-run', volume: 0.82 },
   { key: 'sfx-collect', volume: 0.70 },
   { key: 'sfx-grunt-male', volume: 0.85 },
   { key: 'sfx-grunt-female', volume: 0.75 },
-  { key: 'sfx-ui', volume: 0.90 },
+  { key: 'sfx-ui', volume: 0.60 },
   { key: 'sfx-synergy', volume: 0.85 },
 ];
 

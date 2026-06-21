@@ -12,7 +12,7 @@ export const difficultyConfig = {
   platformSpawnMin: 3000,
   platformSpawnMax: 6000,
 
-  honeymoonScoreThreshold: 500,
+  honeymoonUnlockThreshold: 10000,
 
   synergyMultiplier: 5,
   synergyMultiplierDuration: 10000,

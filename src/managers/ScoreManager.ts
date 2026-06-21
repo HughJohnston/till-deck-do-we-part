@@ -4,12 +4,16 @@ export class ScoreManager {
   score = 0;
   multiplier = 1;
   private multiplierTimer = 0;
-  private _isHoneymoonMode = false;
+  private isHoneymoonRun: boolean;
 
-  get isHoneymoonMode() { return this._isHoneymoonMode; }
+  constructor(isHoneymoonRun = false) {
+    this.isHoneymoonRun = isHoneymoonRun;
+  }
+
+  get isHoneymoonMode() { return this.isHoneymoonRun; }
 
   get scoreLabel() {
-    return this._isHoneymoonMode ? 'Holiday Time' : 'Slides made';
+    return this.isHoneymoonRun ? 'Sandcastles built' : 'Slides made';
   }
 
   update(delta: number, currentSpeed: number) {
@@ -22,10 +26,6 @@ export class ScoreManager {
         this.multiplier = 1;
         this.multiplierTimer = 0;
       }
-    }
-
-    if (!this._isHoneymoonMode && this.score >= difficultyConfig.honeymoonScoreThreshold) {
-      this._isHoneymoonMode = true;
     }
   }
 
@@ -48,6 +48,5 @@ export class ScoreManager {
     this.score = 0;
     this.multiplier = 1;
     this.multiplierTimer = 0;
-    this._isHoneymoonMode = false;
   }
 }

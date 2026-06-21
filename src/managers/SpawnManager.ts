@@ -110,7 +110,7 @@ export class SpawnManager {
     const obj = this.obstacles.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setScale(0.6);
     obj.setVelocityX(-speed);
-    obj.body!.setAllowGravity(false);
+    (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     (obj as any).assetKey = def.key;
   }
 
@@ -126,7 +126,7 @@ export class SpawnManager {
     const obj = this.collectables.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setScale(0.6);
     obj.setVelocityX(-speed);
-    obj.body!.setAllowGravity(false);
+    (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     (obj as any).assetKey = def.key;
   }
 
@@ -140,7 +140,7 @@ export class SpawnManager {
 
     const obj = this.synergyGroup.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setVelocityX(-speed);
-    obj.body!.setAllowGravity(false);
+    (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     obj.setTint(0xFFD700);
     (obj as any).assetKey = def.key;
   }
@@ -156,7 +156,7 @@ export class SpawnManager {
     this.platforms.add(platform);
 
     const body = platform.body as Phaser.Physics.Arcade.Body;
-    body.setAllowGravity(false);
+    body.allowGravity = false;
     body.setImmovable(true);
     body.setVelocityX(-speed);
     body.checkCollision.down = false;
@@ -165,7 +165,7 @@ export class SpawnManager {
   }
 
   private destroyIfOffscreen = (child: Phaser.GameObjects.GameObject) => {
-    const obj = child as Phaser.GameObjects.Components.Transform & { destroy: () => void };
+    const obj = child as Phaser.Physics.Arcade.Sprite;
     if (obj.x < -150) obj.destroy();
   };
 

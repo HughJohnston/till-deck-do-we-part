@@ -14,6 +14,12 @@ import { registerAudioConsole } from '../ui/AudioConsole';
 import { stopMenuMusic } from '../ui/menuMusic';
 import { playMusic, stopMusic } from '../ui/musicPlayer';
 import { playSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlayer';
+import {
+  addRunSlides,
+  hasSeenInterstitial,
+} from '../services/HoneymoonProgressService';
+
+export type GameMode = 'normal' | 'honeymoon';
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -31,7 +37,7 @@ export class GameScene extends Phaser.Scene {
   spawnManager!: SpawnManager;
 
   private isGameOver = false;
-  private wasHoneymoonMode = false;
+  private gameMode: GameMode = 'normal';
   private jumpCount = 0;
   private maxJumps = 2;
   private character = 'wilf';
@@ -48,8 +54,44 @@ export class GameScene extends Phaser.Scene {
 
   private scrollVelocity = 0;
 
+  private get isHoneymoonRun(): boolean {
+    return this.gameMode === 'honeymoon';
+  }
+
+  private get skyTextureKey(): string {
+    return this.isHoneymoonRun ? 'bg-honeymoon-sky' : 'bg-sky';
+  }
+
+  private get groundTextureKey(): string {
+    return this.isHoneymoonRun ? 'bg-honeymoon-sand' : 'bg-ground';
+  }
+
+  private get skyTextureHeight(): number {
+    return this.isHoneymoonRun ? BG_TEXTURE_HEIGHTS.honeymoonSky : BG_TEXTURE_HEIGHTS.sky;
+  }
+
+  private get midLayerTextureHeight(): number {
+    return this.isHoneymoonRun ? BG_TEXTURE_HEIGHTS.honeymoonShore : BG_TEXTURE_HEIGHTS.street;
+  }
+
+  private get groundTextureHeight(): number {
+    return this.isHoneymoonRun ? BG_TEXTURE_HEIGHTS.honeymoonSand : BG_TEXTURE_HEIGHTS.ground;
+  }
+
+  private get skyBandRatio(): number {
+    return ENV_LAYOUT.skyBandRatio;
+  }
+
+  private get streetBandRatio(): number {
+    return this.isHoneymoonRun ? ENV_LAYOUT.honeymoonStreetBandRatio : ENV_LAYOUT.streetBandRatio;
+  }
+
   constructor() {
     super('GameScene');
+  }
+
+  init(data: { gameMode?: GameMode }) {
+    this.gameMode = data?.gameMode ?? 'normal';
   }
 
   // Hoisted so it can be passed to forEach without allocating a closure per frame.
@@ -60,8 +102,9 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.isGameOver = false;
-    this.wasHoneymoonMode = false;
     this.jumpCount = 0;
+
+    const isHoneymoonRun = this.gameMode === 'honeymoon';
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -69,13 +112,13 @@ export class GameScene extends Phaser.Scene {
     const groundH = getGroundHeight(h);
 
     this.difficultyManager = new DifficultyManager();
-    this.scoreManager = new ScoreManager();
+    this.scoreManager = new ScoreManager(isHoneymoonRun);
     this.synergyManager = new SynergyManager();
 
     // Parallax backgrounds — created at origin, positioned/scaled by layoutEnvironment()
-    this.skyLayer = this.add.tileSprite(0, 0, w, h, 'bg-sky').setDepth(-4);
-    // Street is a sequence of image segments (see initStreetSegments), not a TileSprite.
-    this.groundLayer = this.add.tileSprite(0, 0, w, h, 'bg-ground').setDepth(-1);
+    this.skyLayer = this.add.tileSprite(0, 0, w, h, this.skyTextureKey).setDepth(-4);
+    // Mid layer is a sequence of image segments (street scenes or repeating shore).
+    this.groundLayer = this.add.tileSprite(0, 0, w, h, this.groundTextureKey).setDepth(-1);
     this.streetSegments = [];
     this.nextStreetIsGap = false;
     this.initStreetSegments();
@@ -141,6 +184,7 @@ export class GameScene extends Phaser.Scene {
 
     // Spawn manager
     this.spawnManager = new SpawnManager(this, this.difficultyManager);
+    if (isHoneymoonRun) this.spawnManager.setHoneymoonMode(true);
     this.spawnManager.nextSynergyKey = () => `synergy-${this.synergyManager.nextLetterNeeded}`;
 
     this.physics.add.collider(this.player, this.spawnManager.platforms, () => { this.jumpCount = 0; });
@@ -178,7 +222,7 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch('HudScene', { gameScene: this });
 
     stopMenuMusic(this);
-    playMusic('bgm');
+    playMusic(isHoneymoonRun ? 'honeymoon-bgm' : 'bgm');
 
     createMuteButton(this);
     registerUiSound(this);
@@ -204,27 +248,25 @@ export class GameScene extends Phaser.Scene {
     const datumY = h * ENV_LAYOUT.datumRatio;
 
     // Sky: top-anchored, uniform scale preserves aspect ratio, tiles horizontally.
-    const skyH = h * ENV_LAYOUT.skyBandRatio;
-    const skyScale = skyH / BG_TEXTURE_HEIGHTS.sky;
+    const skyH = h * this.skyBandRatio;
+    const skyScale = skyH / this.skyTextureHeight;
     this.skyLayer.setSize(w, skyH).setPosition(w / 2, skyH / 2).setTileScale(skyScale);
-    // Street segments: rescale and reposition all existing segments.
     this.layoutStreetSegments();
 
-    // Ground: top edge sits exactly on the datum, extends to the bottom of the screen.
     const groundBandH = h - datumY;
     this.groundLayer
       .setSize(w, groundBandH)
       .setPosition(w / 2, datumY + groundBandH / 2)
-      .setTileScale(groundBandH / BG_TEXTURE_HEIGHTS.ground);
+      .setTileScale(groundBandH / this.groundTextureHeight);
   }
 
   private getStreetScale(): number {
-    return (this.scale.height * ENV_LAYOUT.streetBandRatio) / BG_TEXTURE_HEIGHTS.street;
+    return (this.scale.height * this.streetBandRatio) / this.midLayerTextureHeight;
   }
 
   private getStreetY(): number {
     const h = this.scale.height;
-    return h * ENV_LAYOUT.datumRatio - h * ENV_LAYOUT.streetBandRatio;
+    return h * ENV_LAYOUT.datumRatio - h * this.streetBandRatio;
   }
 
   private initStreetSegments() {
@@ -240,12 +282,14 @@ export class GameScene extends Phaser.Scene {
 
   private spawnStreetSegment(x: number, y: number, scale: number): Phaser.GameObjects.Image {
     let key: string;
-    if (this.nextStreetIsGap) {
+    if (this.isHoneymoonRun) {
+      key = 'bg-honeymoon-shore';
+    } else if (this.nextStreetIsGap) {
       key = 'bg-gap';
     } else {
       key = Phaser.Utils.Array.GetRandom(GameScene.STREET_SCENE_KEYS);
     }
-    this.nextStreetIsGap = !this.nextStreetIsGap;
+    if (!this.isHoneymoonRun) this.nextStreetIsGap = !this.nextStreetIsGap;
     const img = this.add.image(x, y, key).setOrigin(0, 0).setScale(scale).setDepth(-2);
     this.streetSegments.push(img);
     return img;
@@ -319,8 +363,8 @@ export class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
     const datumY = h * ENV_LAYOUT.datumRatio;
-    const streetTopY = datumY - h * ENV_LAYOUT.streetBandRatio;
-    const skyBottomY = h * ENV_LAYOUT.skyBandRatio;
+    const streetTopY = datumY - h * this.streetBandRatio;
+    const skyBottomY = h * this.skyBandRatio;
 
     const g = this.testGraphics;
     g.clear();
@@ -340,18 +384,18 @@ export class GameScene extends Phaser.Scene {
 
   private updateTestOverlay() {
     if (!this.testOverlay) return;
-    const { datumRatio, streetBandRatio, skyBandRatio } = ENV_LAYOUT;
+    const { datumRatio } = ENV_LAYOUT;
     this.testOverlay.setText([
       'TEST MODE  (T to exit)',
       `datumRatio:      ${datumRatio.toFixed(3)}   [Up/Down]`,
-      `streetBandRatio: ${streetBandRatio.toFixed(3)}   [ [ / ] ]`,
-      `skyBandRatio:    ${skyBandRatio.toFixed(3)}   [1 / 2]`,
+      `streetBandRatio: ${this.streetBandRatio.toFixed(3)}   [ [ / ] ]`,
+      `skyBandRatio:    ${this.skyBandRatio.toFixed(3)}   [1 / 2]`,
       `scrollSpeed:     ${this.testScrollSpeed.toFixed(0)}     [ - / + ]`,
     ].join('\n'));
     console.log('[env tuning]', {
       datumRatio: +datumRatio.toFixed(3),
-      streetBandRatio: +streetBandRatio.toFixed(3),
-      skyBandRatio: +skyBandRatio.toFixed(3),
+      streetBandRatio: +this.streetBandRatio.toFixed(3),
+      skyBandRatio: +this.skyBandRatio.toFixed(3),
       scrollSpeed: Math.round(this.testScrollSpeed),
     });
   }
@@ -373,12 +417,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tuneStreetUp() {
-    ENV_LAYOUT.streetBandRatio = Phaser.Math.Clamp(ENV_LAYOUT.streetBandRatio + 0.01, 0.05, 0.9);
+    const key = this.isHoneymoonRun ? 'honeymoonStreetBandRatio' : 'streetBandRatio';
+    ENV_LAYOUT[key] = Phaser.Math.Clamp(ENV_LAYOUT[key] + 0.01, 0.05, 0.9);
     this.applyTuning();
   }
 
   private tuneStreetDown() {
-    ENV_LAYOUT.streetBandRatio = Phaser.Math.Clamp(ENV_LAYOUT.streetBandRatio - 0.01, 0.05, 0.9);
+    const key = this.isHoneymoonRun ? 'honeymoonStreetBandRatio' : 'streetBandRatio';
+    ENV_LAYOUT[key] = Phaser.Math.Clamp(ENV_LAYOUT[key] - 0.01, 0.05, 0.9);
     this.applyTuning();
   }
 
@@ -403,7 +449,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showScorePopup(x: number, y: number, amount: number) {
-    const popup = this.add.text(x, y, `+${amount} slides`, {
+    const unit = this.isHoneymoonRun ? 'sandcastles' : 'slides';
+    const popup = this.add.text(x, y, `+${amount} ${unit}`, {
       fontSize: '22px', color: '#33dd55', fontFamily: FONT_FAMILY,
       stroke: '#0a3315', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(1000);
@@ -517,13 +564,6 @@ export class GameScene extends Phaser.Scene {
     if (onGround && !isRunSfxPlaying()) startRunSfx();
     else if (!onGround && isRunSfxPlaying()) stopRunSfx();
 
-    if (this.scoreManager.isHoneymoonMode && !this.wasHoneymoonMode) {
-      this.wasHoneymoonMode = true;
-      this.spawnManager.setHoneymoonMode(true);
-      this.events.emit('honeymoon-activated');
-      this.cameras.main.flash(500, 255, 200, 100);
-    }
-
     this.events.emit('score-update', this.scoreManager.getDisplayScore(), this.scoreManager.scoreLabel, this.scoreManager.multiplier);
   }
 
@@ -560,12 +600,21 @@ export class GameScene extends Phaser.Scene {
 
     this.time.delayedCall(1400, () => {
       this.scene.stop('HudScene');
-      this.scene.start('GameOverScene', {
-        score: this.scoreManager.getDisplayScore(),
-        scoreLabel: this.scoreManager.scoreLabel,
-        character: this.registry.get('character'),
-        playerName: this.registry.get('playerName'),
-      });
+
+      const score = this.scoreManager.getDisplayScore();
+      const scoreLabel = this.scoreManager.scoreLabel;
+      const character = this.registry.get('character') as string;
+      const playerName = this.registry.get('playerName') as string;
+
+      addRunSlides(score);
+
+      const gameOverData = { score, scoreLabel, character, playerName, gameMode: this.gameMode };
+
+      if (this.gameMode === 'normal' && !hasSeenInterstitial()) {
+        this.scene.start('HoneymoonInterstitialScene', { gameOverData });
+      } else {
+        this.scene.start('GameOverScene', { ...gameOverData, showTicket: true });
+      }
     });
   }
 }
