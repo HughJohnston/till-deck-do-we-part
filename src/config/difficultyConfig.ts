@@ -3,8 +3,8 @@ export const difficultyConfig = {
   maxSpeed: 550,
   speedIncreaseRate: 2,
 
-  obstacleSpawnMin: 700,
-  obstacleSpawnMax: 1400,
+  obstacleSpawnMin: 1400,
+  obstacleSpawnMax: 2800,
   obstacleFirstSpawnDelay: 500,
   collectableSpawnMin: 900,
   collectableSpawnMax: 1750,
@@ -18,6 +18,6 @@ export const difficultyConfig = {
   synergyMultiplier: 5,
   synergyMultiplierDuration: 10000,
 
-  collectablePoints: 50,
+  collectablePoints: 100,
   baseScorePerSecond: 5,
 };

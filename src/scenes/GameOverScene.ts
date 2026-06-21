@@ -32,6 +32,9 @@ export class GameOverScene extends Phaser.Scene {
   private wilfToggleBtn?: UiButton;
   private ruthToggleBtn?: UiButton;
   private rankText?: Phaser.GameObjects.Text;
+  private bestText?: Phaser.GameObjects.Text;
+  private slidesText?: Phaser.GameObjects.Text;
+  private statsY = 0;
   private rankFetchGeneration = 0;
 
   constructor() {
@@ -58,7 +61,9 @@ export class GameOverScene extends Phaser.Scene {
     const gameMode = (this.data.get('gameMode') as GameMode) ?? 'normal';
 
     const previousTop = getTopScore();
-    if (score > previousTop) saveTopScore(score);
+    const isNewRecord = score > previousTop;
+    if (isNewRecord) saveTopScore(score);
+    const topScore = Math.max(score, previousTop);
 
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));
@@ -106,20 +111,22 @@ export class GameOverScene extends Phaser.Scene {
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
-    const statsY = scoreY + numberSize / 2 + 24;
-    const statsWidth = w * 0.8;
-    const statsLeft = cx - statsWidth / 2;
-    const statsRight = cx + statsWidth / 2;
+    this.statsY = scoreY + numberSize / 2 + 24;
     const statsFont = '14px';
 
-    this.rankText = this.add.text(statsLeft, statsY, 'Rank …', {
+    this.rankText = this.add.text(0, this.statsY, 'Rank …', {
       fontSize: statsFont, color: '#aaaacc', fontFamily: FONT_FAMILY,
     }).setOrigin(0, 0.5);
 
-    this.add.text(statsRight, statsY, `${formatSlides(getTotalSlides())} slides total`, {
-      fontSize: statsFont, color: '#aaaacc', fontFamily: FONT_FAMILY,
-    }).setOrigin(1, 0.5);
+    this.bestText = this.add.text(0, this.statsY, `Best: ${topScore}`, {
+      fontSize: statsFont, color: isNewRecord ? '#FFD700' : '#aaaacc', fontFamily: FONT_FAMILY,
+    }).setOrigin(0, 0.5);
 
+    this.slidesText = this.add.text(0, this.statsY, `${formatSlides(getTotalSlides())} slides total`, {
+      fontSize: statsFont, color: '#aaaacc', fontFamily: FONT_FAMILY,
+    }).setOrigin(0, 0.5);
+
+    this.layoutStatsRow();
     this.loadPlayerRank(playerName.trim());
 
     const base = Math.min(w, h);
@@ -193,11 +200,24 @@ export class GameOverScene extends Phaser.Scene {
     });
   }
 
+  private layoutStatsRow() {
+    if (!this.rankText || !this.bestText || !this.slidesText) return;
+    const gap = 16;
+    const parts = [this.rankText, this.bestText, this.slidesText];
+    const totalWidth = parts.reduce((sum, text, i) => sum + text.width + (i > 0 ? gap : 0), 0);
+    let x = this.scale.width / 2 - totalWidth / 2;
+    for (const text of parts) {
+      text.setPosition(x, this.statsY);
+      x += text.width + gap;
+    }
+  }
+
   private loadPlayerRank(playerName: string) {
     const generation = ++this.rankFetchGeneration;
     void fetchPlayerRank(playerName).then((rank) => {
       if (generation !== this.rankFetchGeneration || !this.rankText?.active) return;
       this.rankText.setText(rank != null ? `Rank #${rank}` : 'Rank —');
+      this.layoutStatsRow();
     });
   }
 
