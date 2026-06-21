@@ -7,13 +7,19 @@ import { GameScene } from './GameScene';
 // indistinguishable for a counter and removes that work from most frames.
 const SCORE_REFRESH_MS = 80;
 
+function getPersonalBest(): number {
+  try { return parseInt(localStorage.getItem('tilldeck_topscore') || '0', 10); } catch { return 0; }
+}
+
 export class HudScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
+  private bestText!: Phaser.GameObjects.Text;
   private multiplierText!: Phaser.GameObjects.Text;
   private synergyLetters: Phaser.GameObjects.Text[] = [];
   private gameScene!: Phaser.Scene;
   private lastScoreStr = '';
   private lastScoreAt = 0;
+  private personalBest = 0;
 
   constructor() {
     super('HudScene');
@@ -25,26 +31,33 @@ export class HudScene extends Phaser.Scene {
 
   create() {
     const w = this.scale.width;
+    this.personalBest = getPersonalBest();
 
-    this.scoreText = this.add.text(w / 2, 212, 'Slides made: 0', {
+    this.scoreText = this.add.text(w / 2, 112, 'Slides made: 0', {
       fontSize: '34px', color: '#ffffff', fontFamily: FONT_FAMILY,
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0);
 
-    this.multiplierText = this.add.text(w / 2, 264, '', {
+    this.bestText = this.add.text(w / 2, 152, `Your best: ${this.personalBest}`, {
+      fontSize: '14px', color: '#aaaacc', fontFamily: FONT_FAMILY,
+      stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5, 0);
+
+    this.multiplierText = this.add.text(w / 2, 178, '', {
       fontSize: '24px', color: '#FFD700', fontFamily: FONT_FAMILY,
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0);
 
-    const synergyStartX = 16;
-    const letterSpacing = 20;
     const displayLetters = ['S', 'Y', 'N', 'E', 'R', 'G', 'Y'];
+    const letterSpacing = 20;
+    const synergyWidth = (displayLetters.length - 1) * letterSpacing;
+    const synergyStartX = w / 2 - synergyWidth / 2;
     for (let i = 0; i < displayLetters.length; i++) {
       // Base fill is white so a GPU tint renders the exact target color.
       const letter = this.add.text(synergyStartX + i * letterSpacing, 12, displayLetters[i], {
         fontSize: '14px', color: '#ffffff', fontFamily: FONT_FAMILY,
         stroke: '#000000', strokeThickness: 2,
-      });
+      }).setOrigin(0.5, 0);
       letter.setTint(0x555555);
       this.synergyLetters.push(letter);
     }
@@ -57,6 +70,14 @@ export class HudScene extends Phaser.Scene {
         this.scoreText.setText(str);
         this.scoreText.setX(this.scale.width / 2);
       }
+      if (score > this.personalBest) {
+        this.bestText.setText('NEW PB!');
+        this.bestText.setColor('#FFD700');
+      } else {
+        this.bestText.setText(`Your best: ${this.personalBest}`);
+        this.bestText.setColor('#aaaacc');
+      }
+      this.bestText.setX(this.scale.width / 2);
       // setText is a no-op when the value is unchanged, so the (usually empty)
       // multiplier text costs nothing on the vast majority of frames.
       this.multiplierText.setText(multiplier > 1 ? `${multiplier}x SYNERGY!` : '');
