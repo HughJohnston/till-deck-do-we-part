@@ -22,8 +22,8 @@ export class LeaderboardScene extends Phaser.Scene {
 
   private viewportContainer?: Phaser.GameObjects.Container;
   private listContainer?: Phaser.GameObjects.Container;
-  private maskGfx?: Phaser.GameObjects.Graphics;
-  private listMask?: Phaser.Display.Masks.GeometryMask;
+  private maskRect?: Phaser.GameObjects.Rectangle;
+  private listMaskFilter?: Phaser.Filters.Mask;
 
   // Scroll state / current viewport geometry.
   private scrollY = 0;
@@ -84,7 +84,6 @@ export class LeaderboardScene extends Phaser.Scene {
     });
 
     this.setupScrollInput();
-    this.maskGfx = this.add.graphics().setAlpha(0);
     this.relayout();
 
     createMuteButton(this);
@@ -95,7 +94,7 @@ export class LeaderboardScene extends Phaser.Scene {
     this.scale.on('resize', this.resizeHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.resizeHandler) this.scale.off('resize', this.resizeHandler);
-      this.maskGfx?.destroy();
+      this.maskRect?.destroy();
     });
 
     this.fetchGeneration++;
@@ -172,27 +171,31 @@ export class LeaderboardScene extends Phaser.Scene {
     this.panel.setPosition(cx, this.viewTop + this.viewHeight / 2)
       .setSize(this.listWidth, this.viewHeight);
 
+    this.maskRect = this.maskRect ?? this.add.rectangle(0, 0, 1, 1, 0xffffff).setVisible(false);
+    this.updateMaskBounds();
     this.buildList();
   }
 
-  private updateListMask() {
-    if (!this.maskGfx) return;
-    this.maskGfx.clear();
-    this.maskGfx.fillStyle(0xffffff);
-    this.maskGfx.fillRect(this.listLeft, this.viewTop, this.listWidth, this.viewHeight);
-    this.listMask = this.maskGfx.createGeometryMask();
+  private updateMaskBounds() {
+    if (!this.maskRect) return;
+    this.maskRect.setPosition(
+      this.listLeft + this.listWidth / 2,
+      this.viewTop + this.viewHeight / 2,
+    );
+    this.maskRect.setSize(this.listWidth, this.viewHeight);
   }
 
   private buildList() {
     if (this.viewportContainer) {
-      this.viewportContainer.clearMask(true);
+      if (this.listMaskFilter) {
+        this.viewportContainer.filters?.internal?.remove(this.listMaskFilter);
+        this.listMaskFilter = undefined;
+      }
       this.viewportContainer.removeAll(true);
       this.viewportContainer.destroy();
     }
     this.viewportContainer = undefined;
     this.listContainer = undefined;
-
-    this.updateListMask();
 
     if (!this.loaded) {
       this.statusText.setText('Loading...').setVisible(true)
@@ -266,7 +269,14 @@ export class LeaderboardScene extends Phaser.Scene {
       list.add(scoreText);
     });
 
-    if (this.listMask) viewport.setMask(this.listMask);
+    this.updateMaskBounds();
+    viewport.enableFilters();
+    this.listMaskFilter = viewport.filters!.internal.addMask(
+      this.maskRect!,
+      false,
+      this.cameras.main,
+      'world',
+    );
 
     this.viewportContainer = viewport;
     this.listContainer = list;
