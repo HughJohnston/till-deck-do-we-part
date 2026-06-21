@@ -14,7 +14,7 @@ export interface GameOverData {
   character: string;
   playerName: string;
   gameMode?: GameMode;
-  showTicket?: boolean;
+  skipTicketOnce?: boolean;
 }
 
 function getTopScore(): number {
@@ -40,7 +40,7 @@ export class GameOverScene extends Phaser.Scene {
     this.data.set('character', data.character);
     this.data.set('playerName', data.playerName);
     this.data.set('gameMode', data.gameMode ?? 'normal');
-    this.data.set('showTicket', data.showTicket ?? false);
+    this.data.set('skipTicketOnce', data.skipTicketOnce ?? false);
   }
 
   create() {
@@ -53,7 +53,7 @@ export class GameOverScene extends Phaser.Scene {
     const character = this.data.get('character') as string;
     const playerName = this.data.get('playerName') as string;
     const gameMode = (this.data.get('gameMode') as GameMode) ?? 'normal';
-    const showTicket = this.data.get('showTicket') as boolean;
+    const skipTicketOnce = this.data.get('skipTicketOnce') as boolean;
 
     const previousTop = getTopScore();
     const isNewRecord = score > previousTop;
@@ -65,10 +65,12 @@ export class GameOverScene extends Phaser.Scene {
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));
 
-    const gameOverData: GameOverData = { score, scoreLabel, character, playerName, gameMode };
+    const gameOverData: GameOverData = {
+      score, scoreLabel, character, playerName, gameMode, skipTicketOnce,
+    };
     this.gameOverData = gameOverData;
 
-    if (showTicket && hasSeenInterstitial()) {
+    if (hasSeenInterstitial() && !skipTicketOnce) {
       this.addTicketIcon();
     }
 
@@ -76,9 +78,34 @@ export class GameOverScene extends Phaser.Scene {
       fontSize: '28px', color: '#FF4444', fontFamily: FONT_FAMILY,
     }).setOrigin(0.5);
 
-    this.add.text(cx, h * 0.23, playerName, {
+    const nameY = h * 0.23;
+    const nameText = this.add.text(cx, nameY, playerName, {
       fontSize: '18px', color: '#FFD700', fontFamily: FONT_FAMILY,
     }).setOrigin(0.5);
+
+    const pencil = this.add.text(nameText.x + nameText.width / 2 + 10, nameY, '✏️', {
+      fontSize: '16px', fontFamily: FONT_FAMILY,
+    }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true }).setDepth(10);
+    pencil.on('pointerdown', () => {
+      this.scene.start('MenuScene', {
+        mode: 'name',
+        returnTo: { scene: 'GameOverScene', data: this.gameOverData },
+      });
+    });
+
+    const swapBtnW = Phaser.Math.Clamp(Math.round(w * 0.36), 120, 180);
+    const swapBtnH = Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.05), 32, 42);
+    createButton(this, {
+      x: cx, y: nameY + 28, width: swapBtnW, height: swapBtnH,
+      label: 'SWAP PLAYER', variant: 'tertiary',
+      fontSize: Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.032), 12, 16),
+      onClick: () => {
+        this.scene.start('MenuScene', {
+          mode: 'character',
+          returnTo: { scene: 'GameOverScene', data: this.gameOverData },
+        });
+      },
+    });
 
     const numberSize = Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.12), 40, 80);
     const scoreY = h * 0.42;
@@ -134,7 +161,7 @@ export class GameOverScene extends Phaser.Scene {
     registerAudioConsole(this);
 
     this.unlockKeyHandler = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'u') return;
+      if (!event.shiftKey || event.key.toLowerCase() !== 'u') return;
       if (isUnlocked()) return;
       unlockHoneymoon();
       if (this.ticketIcon) {

@@ -17,6 +17,7 @@ import { playSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlay
 import {
   addRunSlides,
   hasSeenInterstitial,
+  isUnlocked,
 } from '../services/HoneymoonProgressService';
 
 export type GameMode = 'normal' | 'honeymoon';
@@ -228,7 +229,10 @@ export class GameScene extends Phaser.Scene {
     registerUiSound(this);
     registerAudioConsole(this);
 
-    this.input.keyboard?.on('keydown-T', () => this.toggleTestMode());
+    this.input.keyboard?.on('keydown-T', (event: KeyboardEvent) => {
+      if (!event.shiftKey) return;
+      this.toggleTestMode();
+    });
 
     this.scale.on('resize', this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -606,14 +610,18 @@ export class GameScene extends Phaser.Scene {
       const character = this.registry.get('character') as string;
       const playerName = this.registry.get('playerName') as string;
 
+      const wasUnlocked = isUnlocked();
       addRunSlides(score);
+      const justUnlocked = !wasUnlocked && isUnlocked();
 
-      const gameOverData = { score, scoreLabel, character, playerName, gameMode: this.gameMode };
+      const gameOverData = {
+        score, scoreLabel, character, playerName, gameMode: this.gameMode,
+      };
 
-      if (this.gameMode === 'normal' && !hasSeenInterstitial()) {
-        this.scene.start('HoneymoonInterstitialScene', { gameOverData });
+      if (this.gameMode === 'normal' && (!hasSeenInterstitial() || justUnlocked)) {
+        this.scene.start('HoneymoonInterstitialScene', { gameOverData, celebrateUnlock: justUnlocked });
       } else {
-        this.scene.start('GameOverScene', { ...gameOverData, showTicket: true });
+        this.scene.start('GameOverScene', gameOverData);
       }
     });
   }

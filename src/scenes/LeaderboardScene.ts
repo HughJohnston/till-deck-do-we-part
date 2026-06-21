@@ -44,6 +44,8 @@ export class LeaderboardScene extends Phaser.Scene {
     super('LeaderboardScene');
   }
 
+  private fetchGeneration = 0;
+
   init(data: GameOverData) {
     this.returnData = data;
     this.entries = [];
@@ -96,7 +98,11 @@ export class LeaderboardScene extends Phaser.Scene {
       this.maskGfx?.destroy();
     });
 
+    this.fetchGeneration++;
+    const generation = this.fetchGeneration;
+
     fetchTopScores(100).then((rows) => {
+      if (!this.scene.isActive() || generation !== this.fetchGeneration) return;
       this.entries = rows;
       this.loaded = true;
       this.relayout();
@@ -178,7 +184,10 @@ export class LeaderboardScene extends Phaser.Scene {
   }
 
   private buildList() {
-    this.viewportContainer?.destroy();
+    if (this.viewportContainer) {
+      this.viewportContainer.removeAll(true);
+      this.viewportContainer.destroy();
+    }
     this.viewportContainer = undefined;
     this.listContainer = undefined;
 
@@ -217,12 +226,11 @@ export class LeaderboardScene extends Phaser.Scene {
       const isSelf = playerName.length > 0 && (entry.name ?? '').trim() === playerName;
 
       if (i % 2 === 1) {
-        list.add(
-          this.add.rectangle(
-            this.listWidth / 2, rowY,
-            this.listWidth, this.rowHeight, 0xffffff, 0.05,
-          ),
+        const stripe = this.add.rectangle(
+          this.listWidth / 2, rowY,
+          this.listWidth, this.rowHeight, 0xffffff, 0.05,
         );
+        list.add(stripe);
       }
 
       const rankText = this.add.text(rankX, rowY, `${i + 1}`, {
@@ -246,7 +254,6 @@ export class LeaderboardScene extends Phaser.Scene {
         fontFamily: FONT_FAMILY,
         fontStyle: isTop || isSelf ? 'bold' : 'normal',
       }).setOrigin(0, 0.5);
-      // Keep the name from overlapping the score column.
       const maxNameWidth = scoreX - labelX - this.listWidth * 0.18;
       if (nameText.width > maxNameWidth) nameText.setText(this.truncate(displayName, maxNameWidth, fontSize));
       list.add(nameText);

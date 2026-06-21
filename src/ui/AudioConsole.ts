@@ -162,7 +162,8 @@ export class AudioConsoleScene extends Phaser.Scene {
 }
 
 export function registerAudioConsole(scene: Phaser.Scene) {
-  scene.input.keyboard?.on('keydown-M', () => {
+  scene.input.keyboard?.on('keydown-M', (event: KeyboardEvent) => {
+    if (!event.shiftKey) return;
     const game = scene.game;
     if (game.scene.isActive('AudioConsole')) {
       game.scene.stop('AudioConsole');

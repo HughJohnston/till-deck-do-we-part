@@ -5,8 +5,16 @@ import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
 import { playMenuMusic } from '../ui/menuMusic';
 import { UiButton, createButton } from '../ui/Button';
+import type { GameOverData } from './GameOverScene';
 
 type VisibleGameObject = Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible;
+
+export type MenuMode = 'full' | 'name' | 'character';
+
+export interface MenuSceneData {
+  mode?: MenuMode;
+  returnTo?: { scene: string; data: GameOverData };
+}
 
 interface MenuLayout {
   w: number;
@@ -29,6 +37,8 @@ interface MenuLayout {
 }
 
 export class MenuScene extends Phaser.Scene {
+  private menuMode: MenuMode = 'full';
+  private returnTo?: { scene: string; data: GameOverData };
   private step: 1 | 2 = 1;
   private selectedCharacter: 'wilf' | 'ruth' = 'wilf';
   private bg!: Phaser.GameObjects.Image;
@@ -62,9 +72,14 @@ export class MenuScene extends Phaser.Scene {
     super('MenuScene');
   }
 
+  init(data?: MenuSceneData) {
+    this.menuMode = data?.mode ?? 'full';
+    this.returnTo = data?.returnTo;
+  }
+
   create() {
-    this.playerName = '';
-    this.step = 1;
+    this.playerName = (this.registry.get('playerName') as string) ?? '';
+    this.step = this.menuMode === 'character' ? 2 : 1;
     this.isTouch = this.sys.game.device.input.touch;
     const layout = this.computeLayout(this.scale.width, this.scale.height);
 
@@ -98,8 +113,12 @@ export class MenuScene extends Phaser.Scene {
 
     this.nextButton = createButton(this, {
       x: layout.cx, y: 0, width: layout.btnW, height: layout.btnH,
-      label: 'NEXT', variant: 'primary', disabled: true,
-      onClick: () => this.goToCharStep(),
+      label: this.menuMode === 'name' ? 'SAVE' : 'NEXT',
+      variant: 'primary', disabled: this.playerName.trim().length === 0,
+      onClick: () => {
+        if (this.menuMode === 'name') this.saveNameAndReturn();
+        else this.goToCharStep();
+      },
     });
 
     this.nameStepObjects = [
@@ -129,14 +148,21 @@ export class MenuScene extends Phaser.Scene {
 
     this.playButton = createButton(this, {
       x: layout.cx, y: 0, width: layout.btnW, height: layout.btnH,
-      label: 'PLAY', variant: 'primary',
-      onClick: () => this.startGame(),
+      label: this.menuMode === 'character' ? 'CONFIRM' : 'PLAY',
+      variant: 'primary',
+      onClick: () => {
+        if (this.menuMode === 'character') this.confirmCharacterAndReturn();
+        else this.startGame();
+      },
     });
 
     this.backButton = createButton(this, {
       x: layout.cx, y: 0, width: layout.btnW, height: layout.btnH,
       label: '← Back', variant: 'tertiary',
-      onClick: () => this.showStep(1),
+      onClick: () => {
+        if (this.menuMode === 'full') this.showStep(1);
+        else this.returnToPreviousScene();
+      },
     });
 
     this.charStepObjects = [
@@ -144,11 +170,13 @@ export class MenuScene extends Phaser.Scene {
       this.ruthImage, this.ruthFrame, this.ruthName,
     ];
 
-    this.selectCharacter('wilf');
+    const savedChar = this.registry.get('character') as 'wilf' | 'ruth' | undefined;
+    this.selectCharacter(savedChar === 'ruth' ? 'ruth' : 'wilf');
     this.updateNameDisplay();
     this.updateNextButton();
     this.applyLayout(layout);
-    this.showStep(1);
+    if (this.menuMode === 'character') this.showStep(2);
+    else this.showStep(1);
     registerUiSound(this);
     registerAudioConsole(this);
     playMenuMusic(this);
@@ -292,7 +320,8 @@ export class MenuScene extends Phaser.Scene {
       if (event.key === 'Enter') {
         event.preventDefault();
         input.blur();
-        this.goToCharStep();
+        if (this.menuMode === 'name') this.saveNameAndReturn();
+        else this.goToCharStep();
       }
     };
     input.addEventListener('input', this.nameInputHandler);
@@ -328,15 +357,18 @@ export class MenuScene extends Phaser.Scene {
 
   private showStep(step: 1 | 2) {
     this.step = step;
-    this.nameStepObjects.forEach((obj) => obj.setVisible(step === 1));
-    this.charStepObjects.forEach((obj) => obj.setVisible(step === 2));
-    this.nextButton.setVisible(step === 1);
-    this.playButton.setVisible(step === 2);
-    this.backButton.setVisible(step === 2);
+    const showName = this.menuMode !== 'character' && step === 1;
+    const showChar = this.menuMode !== 'name' && step === 2;
+
+    this.nameStepObjects.forEach((obj) => obj.setVisible(showName));
+    this.charStepObjects.forEach((obj) => obj.setVisible(showChar));
+    this.nextButton.setVisible(showName);
+    this.playButton.setVisible(showChar);
+    this.backButton.setVisible(showChar || this.menuMode === 'name');
 
     if (this.nameInput) {
-      this.nameInput.style.display = step === 1 ? 'block' : 'none';
-      if (step !== 1) this.nameInput.blur();
+      this.nameInput.style.display = showName ? 'block' : 'none';
+      if (!showName) this.nameInput.blur();
     }
 
     if (this.keyboardHandler) {
@@ -344,20 +376,24 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.keyboardHandler = (event: KeyboardEvent) => {
-      if (step === 1) {
-        // On touch devices the hidden HTML input is the source of truth, so
-        // skip char append/backspace here to avoid double-entry.
+      if (showName) {
         if (!this.isTouch) {
           if (event.key === 'Backspace') this.playerName = this.playerName.slice(0, -1);
-          else if (event.key === 'Enter') { this.goToCharStep(); return; }
+          else if (event.key === 'Enter') {
+            if (this.menuMode === 'name') this.saveNameAndReturn();
+            else this.goToCharStep();
+            return;
+          }
           else if (event.key.length === 1 && this.playerName.length < 20) this.playerName += event.key;
           this.updateNameDisplay();
           this.updateNextButton();
         } else if (event.key === 'Enter') {
-          this.goToCharStep();
+          if (this.menuMode === 'name') this.saveNameAndReturn();
+          else this.goToCharStep();
         }
       } else if (event.key === 'Enter') {
-        this.startGame();
+        if (this.menuMode === 'character') this.confirmCharacterAndReturn();
+        else this.startGame();
       }
     };
     this.input.keyboard?.on('keydown', this.keyboardHandler);
@@ -394,9 +430,36 @@ export class MenuScene extends Phaser.Scene {
     if (!name) return;
     this.registry.set('playerName', name);
     this.registry.set('character', this.selectedCharacter);
+    this.cleanupAndLeave();
+    this.scene.start('IntroScene');
+  }
+
+  private returnToPreviousScene() {
+    if (!this.returnTo) return;
+    this.cleanupAndLeave();
+    this.scene.start(this.returnTo.scene, this.returnTo.data);
+  }
+
+  private saveNameAndReturn() {
+    const name = this.playerName.trim();
+    if (!name || !this.returnTo) return;
+    this.registry.set('playerName', name);
+    const data: GameOverData = { ...this.returnTo.data, playerName: name };
+    this.cleanupAndLeave();
+    this.scene.start(this.returnTo.scene, data);
+  }
+
+  private confirmCharacterAndReturn() {
+    if (!this.returnTo) return;
+    this.registry.set('character', this.selectedCharacter);
+    const data: GameOverData = { ...this.returnTo.data, character: this.selectedCharacter };
+    this.cleanupAndLeave();
+    this.scene.start(this.returnTo.scene, data);
+  }
+
+  private cleanupAndLeave() {
     if (this.cursorTimer) this.cursorTimer.destroy();
     if (this.keyboardHandler) this.input.keyboard?.off('keydown', this.keyboardHandler);
     this.destroyNameInput();
-    this.scene.start('IntroScene');
   }
 }

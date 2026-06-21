@@ -17,10 +17,12 @@ import {
 } from '../services/HoneymoonProgressService';
 import { GameOverData } from './GameOverScene';
 import { GameMode } from './GameScene';
+import { spawnConfetti } from '../ui/confetti';
 
 export interface HoneymoonInterstitialData {
   gameOverData: GameOverData;
   fromGameOver?: boolean;
+  celebrateUnlock?: boolean;
 }
 
 const PANEL_COLOR = 0x4A90D9;
@@ -31,6 +33,7 @@ const BANNER_STROKE = 0x44AA44;
 export class HoneymoonInterstitialScene extends Phaser.Scene {
   private gameOverData!: GameOverData;
   private fromGameOver = false;
+  private celebrateUnlock = false;
   private bg!: Phaser.GameObjects.Image;
   private resizeHandler?: (gameSize: Phaser.Structs.Size) => void;
 
@@ -41,6 +44,7 @@ export class HoneymoonInterstitialScene extends Phaser.Scene {
   init(data: HoneymoonInterstitialData) {
     this.gameOverData = data.gameOverData;
     this.fromGameOver = data.fromGameOver ?? false;
+    this.celebrateUnlock = data.celebrateUnlock ?? false;
   }
 
   create() {
@@ -83,6 +87,7 @@ export class HoneymoonInterstitialScene extends Phaser.Scene {
 
     if (unlocked) {
       this.buildUnlockedLayout(cx, panelY, panelH, ticketY, ticketH, fontTitle, fontStat, fontBtn, btnH, btnW, stackGap, w, h);
+      if (this.celebrateUnlock) spawnConfetti(this);
     } else {
       this.buildLockedLayout(cx, panelY, panelH, ticketY, ticketH, panelW, fontTitle, fontStat, fontBtn, btnH, btnW, stackGap, w, h);
     }
@@ -183,8 +188,12 @@ export class HoneymoonInterstitialScene extends Phaser.Scene {
   }
 
   private dismissToGameOver() {
-    if (!this.fromGameOver) markInterstitialSeen();
-    this.scene.start('GameOverScene', this.gameOverData);
+    if (!this.fromGameOver) {
+      markInterstitialSeen();
+      this.scene.start('GameOverScene', { ...this.gameOverData, skipTicketOnce: true });
+    } else {
+      this.scene.start('GameOverScene', this.gameOverData);
+    }
   }
 
   private startHoneymoon() {
