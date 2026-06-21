@@ -16,7 +16,6 @@ import { playMusic, stopMusic } from '../ui/musicPlayer';
 import { playSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlayer';
 import {
   addRunSlides,
-  hasSeenInterstitial,
   isUnlocked,
 } from '../services/HoneymoonProgressService';
 import { submitScore } from '../services/LeaderboardService';
@@ -621,7 +620,7 @@ export class GameScene extends Phaser.Scene {
         score, scoreLabel, character, playerName, gameMode: this.gameMode,
       };
 
-      if (this.gameMode === 'normal' && (!hasSeenInterstitial() || justUnlocked)) {
+      if (this.gameMode === 'normal' && !wasUnlocked) {
         this.scene.start('HoneymoonInterstitialScene', { gameOverData, celebrateUnlock: justUnlocked });
       } else {
         this.scene.start('GameOverScene', gameOverData);
