@@ -84,7 +84,7 @@ export class LeaderboardScene extends Phaser.Scene {
     });
 
     this.setupScrollInput();
-    this.maskGfx = this.add.graphics().setVisible(false);
+    this.maskGfx = this.add.graphics().setAlpha(0);
     this.relayout();
 
     createMuteButton(this);
@@ -180,11 +180,12 @@ export class LeaderboardScene extends Phaser.Scene {
     this.maskGfx.clear();
     this.maskGfx.fillStyle(0xffffff);
     this.maskGfx.fillRect(this.listLeft, this.viewTop, this.listWidth, this.viewHeight);
-    if (!this.listMask) this.listMask = this.maskGfx.createGeometryMask();
+    this.listMask = this.maskGfx.createGeometryMask();
   }
 
   private buildList() {
     if (this.viewportContainer) {
+      this.viewportContainer.clearMask(true);
       this.viewportContainer.removeAll(true);
       this.viewportContainer.destroy();
     }

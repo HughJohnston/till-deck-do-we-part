@@ -19,6 +19,7 @@ import {
   hasSeenInterstitial,
   isUnlocked,
 } from '../services/HoneymoonProgressService';
+import { submitScore } from '../services/LeaderboardService';
 
 export type GameMode = 'normal' | 'honeymoon';
 
@@ -613,6 +614,8 @@ export class GameScene extends Phaser.Scene {
       const wasUnlocked = isUnlocked();
       addRunSlides(score);
       const justUnlocked = !wasUnlocked && isUnlocked();
+
+      submitScore({ name: playerName, score, character });
 
       const gameOverData = {
         score, scoreLabel, character, playerName, gameMode: this.gameMode,

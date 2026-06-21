@@ -4,7 +4,6 @@ import { createMuteButton } from '../ui/MuteButton';
 import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
 import { createButton } from '../ui/Button';
-import { submitScore } from '../services/LeaderboardService';
 import { hasSeenInterstitial, isUnlocked, unlockHoneymoon } from '../services/HoneymoonProgressService';
 import { GameMode } from './GameScene';
 
@@ -59,8 +58,6 @@ export class GameOverScene extends Phaser.Scene {
     const isNewRecord = score > previousTop;
     if (isNewRecord) saveTopScore(score);
     const topScore = Math.max(score, previousTop);
-
-    submitScore({ name: playerName, score, character });
 
     const goBg = this.add.image(cx, h / 2, 'menu-home-faded').setOrigin(0.5);
     goBg.setScale(Math.max(w / goBg.width, h / goBg.height));

@@ -59,9 +59,20 @@ export async function fetchTopScores(limit = 100): Promise<LeaderboardEntry[]> {
       return [];
     }
     const rows = (await res.json()) as LeaderboardEntry[];
-    return Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) return [];
+    return dedupeDisplayRows(rows);
   } catch (err) {
     console.warn('[leaderboard] fetchTopScores failed', err);
     return [];
   }
+}
+
+function dedupeDisplayRows(rows: LeaderboardEntry[]): LeaderboardEntry[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = `${(row.name ?? '').trim().toLowerCase()}|${Math.floor(row.score)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
