@@ -26,12 +26,12 @@ export class HudScene extends Phaser.Scene {
   create() {
     const w = this.scale.width;
 
-    this.scoreText = this.add.text(w / 2, 12, 'Slides made: 0', {
+    this.scoreText = this.add.text(w / 2, 212, 'Slides made: 0', {
       fontSize: '34px', color: '#ffffff', fontFamily: FONT_FAMILY,
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0);
 
-    this.multiplierText = this.add.text(w / 2, 64, '', {
+    this.multiplierText = this.add.text(w / 2, 264, '', {
       fontSize: '24px', color: '#FFD700', fontFamily: FONT_FAMILY,
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0);

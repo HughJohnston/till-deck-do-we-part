@@ -24,6 +24,10 @@ function saveTopScore(score: number) {
   try { localStorage.setItem('tilldeck_topscore', String(score)); } catch { /* */ }
 }
 
+function getSpouseDisplayName(character: string): string {
+  return character === 'ruth' ? 'RUTH' : 'WILF';
+}
+
 export class GameOverScene extends Phaser.Scene {
   private ticketIcon?: Phaser.GameObjects.Image;
   private gameOverData!: GameOverData;
@@ -90,20 +94,6 @@ export class GameOverScene extends Phaser.Scene {
       });
     });
 
-    const swapBtnW = Phaser.Math.Clamp(Math.round(w * 0.36), 120, 180);
-    const swapBtnH = Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.05), 32, 42);
-    createButton(this, {
-      x: cx, y: nameY + 28, width: swapBtnW, height: swapBtnH,
-      label: 'SWAP PLAYER', variant: 'tertiary',
-      fontSize: Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.032), 12, 16),
-      onClick: () => {
-        this.scene.start('MenuScene', {
-          mode: 'character',
-          returnTo: { scene: 'GameOverScene', data: this.gameOverData },
-        });
-      },
-    });
-
     const numberSize = Phaser.Math.Clamp(Math.round(Math.min(w, h) * 0.12), 40, 80);
     const scoreY = h * 0.42;
 
@@ -124,28 +114,44 @@ export class GameOverScene extends Phaser.Scene {
     const fontBtn = Phaser.Math.Clamp(Math.round(base * 0.048), 16, 24);
     const btnH = Phaser.Math.Clamp(Math.round(base * 0.06), 38, 50);
     const btnW = Phaser.Math.Clamp(Math.round(w * 0.56), 180, 260);
+    const btnGap = Phaser.Math.Clamp(Math.round(base * 0.018), 10, 16);
+    const btnStep = btnH + btnGap;
+    const playAgainY = h * 0.62;
+    const spouseSelectorY = playAgainY + btnStep;
+    const leaderboardY = spouseSelectorY + btnStep;
+    const mainMenuY = leaderboardY + btnStep;
 
     createButton(this, {
-      x: cx, y: h * 0.62, width: btnW, height: btnH,
+      x: cx, y: playAgainY, width: btnW, height: btnH,
       label: 'PLAY AGAIN', variant: 'primary', fontSize: fontBtn,
       onClick: () => this.scene.start('GameScene'),
     });
 
     createButton(this, {
-      x: cx, y: h * 0.72, width: btnW, height: btnH,
-      label: 'MENU', variant: 'secondary', fontSize: fontBtn,
-      onClick: () => this.scene.start('MenuScene'),
+      x: cx, y: spouseSelectorY, width: btnW, height: btnH,
+      label: `SPOUSE SELECTOR: ${getSpouseDisplayName(character)}`, variant: 'secondary', fontSize: fontBtn,
+      onClick: () => {
+        this.scene.start('MenuScene', {
+          mode: 'character',
+          returnTo: { scene: 'GameOverScene', data: this.gameOverData },
+        });
+      },
     });
 
-    const lbY = h * 0.82;
     const lbButton = createButton(this, {
-      x: cx, y: lbY, width: btnW, height: btnH,
+      x: cx, y: leaderboardY, width: btnW, height: btnH,
       label: 'LEADERBOARD', variant: 'secondary', fontSize: fontBtn,
       onClick: () => this.scene.start('LeaderboardScene', gameOverData),
     });
 
+    createButton(this, {
+      x: cx, y: mainMenuY, width: btnW, height: btnH,
+      label: 'MAIN MENU', variant: 'tertiary', fontSize: fontBtn,
+      onClick: () => this.scene.start('MenuScene'),
+    });
+
     if (this.textures.exists('ui-trophy')) {
-      const trophy = this.add.image(0, lbY, 'ui-trophy').setOrigin(0.5);
+      const trophy = this.add.image(0, leaderboardY, 'ui-trophy').setOrigin(0.5);
       trophy.setScale((btnH * 0.62) / trophy.height);
       const gap = 8;
       const shift = (trophy.displayWidth + gap) / 2;
