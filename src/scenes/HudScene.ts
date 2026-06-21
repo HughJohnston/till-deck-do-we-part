@@ -1,11 +1,18 @@
 import Phaser from 'phaser';
 import { FONT_FAMILY } from '../config/gameConfig';
 
+// The score climbs every frame, but re-rasterizing the Text to a GPU texture
+// 60x/sec is a real per-frame cost on mobile. Refreshing ~12x/sec is visually
+// indistinguishable for a counter and removes that work from most frames.
+const SCORE_REFRESH_MS = 80;
+
 export class HudScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
   private multiplierText!: Phaser.GameObjects.Text;
   private synergyLetters: Phaser.GameObjects.Text[] = [];
   private gameScene!: Phaser.Scene;
+  private lastScoreStr = '';
+  private lastScoreAt = 0;
 
   constructor() {
     super('HudScene');
@@ -18,14 +25,14 @@ export class HudScene extends Phaser.Scene {
   create() {
     const w = this.scale.width;
 
-    this.scoreText = this.add.text(w / 2, 12, 'Billable Hours: 0', {
-      fontSize: '16px', color: '#ffffff', fontFamily: FONT_FAMILY,
-      stroke: '#000000', strokeThickness: 3,
+    this.scoreText = this.add.text(w / 2, 12, 'Slides made: 0', {
+      fontSize: '34px', color: '#ffffff', fontFamily: FONT_FAMILY,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0);
 
-    this.multiplierText = this.add.text(w / 2, 34, '', {
-      fontSize: '12px', color: '#FFD700', fontFamily: FONT_FAMILY,
-      stroke: '#000000', strokeThickness: 2,
+    this.multiplierText = this.add.text(w / 2, 64, '', {
+      fontSize: '24px', color: '#FFD700', fontFamily: FONT_FAMILY,
+      stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0);
 
     const synergyStartX = 16;
@@ -42,10 +49,16 @@ export class HudScene extends Phaser.Scene {
     }
 
     this.gameScene.events.on('score-update', (score: number, label: string, multiplier: number) => {
-      this.scoreText.setText(`${label}: ${score}`);
-      this.scoreText.setX(this.scale.width / 2);
-      if (multiplier > 1) this.multiplierText.setText(`${multiplier}x SYNERGY!`);
-      else this.multiplierText.setText('');
+      const str = `${label}: ${score}`;
+      if (str !== this.lastScoreStr && this.time.now - this.lastScoreAt >= SCORE_REFRESH_MS) {
+        this.lastScoreStr = str;
+        this.lastScoreAt = this.time.now;
+        this.scoreText.setText(str);
+        this.scoreText.setX(this.scale.width / 2);
+      }
+      // setText is a no-op when the value is unchanged, so the (usually empty)
+      // multiplier text costs nothing on the vast majority of frames.
+      this.multiplierText.setText(multiplier > 1 ? `${multiplier}x SYNERGY!` : '');
     });
 
     this.gameScene.events.on('synergy-letter', (progress: number) => {

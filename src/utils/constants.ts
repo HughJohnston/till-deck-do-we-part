@@ -13,5 +13,5 @@ export function getPlayerX(w: number): number {
   return w * PLAYER_X_RATIO;
 }
 
-export const JUMP_VELOCITY = -550;
-export const PLAYER_SIZE = 64;
+export const JUMP_VELOCITY = -700;
+export const PLAYER_SIZE = 192;

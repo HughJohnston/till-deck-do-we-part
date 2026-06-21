@@ -1,5 +1,9 @@
 import Phaser from 'phaser';
-import { obstacleImages, collectableImages, synergyLetters } from '../config/assetManifest';
+import {
+  workGoodImages, workBadImages,
+  playGoodImages, playBadImages,
+  synergyLetters,
+} from '../config/assetManifest';
 import { getGroundY } from '../utils/constants';
 import { DifficultyManager } from './DifficultyManager';
 
@@ -13,7 +17,6 @@ export class SpawnManager {
   synergyGroup!: Phaser.Physics.Arcade.Group;
   platforms!: Phaser.Physics.Arcade.Group;
 
-  // Returns the asset key of the next synergy letter that should appear, in sequence.
   nextSynergyKey?: () => string | undefined;
 
   private obstacleTimer = 0;
@@ -33,6 +36,16 @@ export class SpawnManager {
 
   setHoneymoonMode(enabled: boolean) {
     this.isHoneymoonMode = enabled;
+  }
+
+  // Normal mode:    obstacles = bad Play,   collectables = good Work
+  // Honeymoon mode: obstacles = bad Work,   collectables = good Play
+  private get obstaclePool() {
+    return this.isHoneymoonMode ? workBadImages : playBadImages;
+  }
+
+  private get collectablePool() {
+    return this.isHoneymoonMode ? playGoodImages : workGoodImages;
   }
 
   update(delta: number) {
@@ -70,42 +83,60 @@ export class SpawnManager {
   private get h() { return this.scene.scale.height; }
   private get groundY() { return getGroundY(this.h); }
 
+  private wouldOverlap(x: number, y: number, w: number, h: number): boolean {
+    const pad = 8;
+    const check = (group: Phaser.Physics.Arcade.Group) => {
+      for (const child of group.getChildren()) {
+        const obj = child as Phaser.Physics.Arcade.Sprite;
+        const ow = obj.displayWidth || 96;
+        const oh = obj.displayHeight || 96;
+        if (Math.abs(obj.x - x) < (w + ow) / 2 + pad &&
+            Math.abs(obj.y - y) < (h + oh) / 2 + pad) {
+          return true;
+        }
+      }
+      return false;
+    };
+    return check(this.obstacles) || check(this.collectables) || check(this.synergyGroup);
+  }
+
   private spawnObstacle(speed: number) {
-    const pool = this.isHoneymoonMode ? collectableImages : obstacleImages;
+    const pool = this.obstaclePool;
     const def = Phaser.Utils.Array.GetRandom(pool);
     const x = this.w + def.width;
     const y = this.groundY - def.height / 2;
+    if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
     const obj = this.obstacles.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
+    obj.setScale(0.6);
     obj.setVelocityX(-speed);
     obj.body!.setAllowGravity(false);
-    obj.setTint(0xff4444);
     (obj as any).assetKey = def.key;
   }
 
   private spawnCollectable(speed: number) {
-    const pool = this.isHoneymoonMode ? obstacleImages : collectableImages;
+    const pool = this.collectablePool;
     const def = Phaser.Utils.Array.GetRandom(pool);
     const x = this.w + def.width;
     const minY = this.groundY - 120;
     const maxY = this.groundY - def.height / 2;
     const y = Phaser.Math.Between(minY, maxY);
+    if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
     const obj = this.collectables.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
+    obj.setScale(0.6);
     obj.setVelocityX(-speed);
     obj.body!.setAllowGravity(false);
-    obj.setTint(0x44dd44);
     (obj as any).assetKey = def.key;
   }
 
   private spawnSynergyLetter(speed: number) {
-    // Only one synergy letter is on screen at a time, and it is always the next
-    // letter needed in the SYNERGY sequence.
     if (this.synergyGroup.getLength() > 0) return;
     const nextKey = this.nextSynergyKey?.();
     const def = (nextKey && synergyLetters.find((l) => l.key === nextKey)) || synergyLetters[0];
     const x = this.w + def.width;
     const y = Phaser.Math.Between(this.groundY - 140, this.groundY - 40);
+    if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
     const obj = this.synergyGroup.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setVelocityX(-speed);
@@ -133,11 +164,13 @@ export class SpawnManager {
     body.checkCollision.right = false;
   }
 
+  private destroyIfOffscreen = (child: Phaser.GameObjects.GameObject) => {
+    const obj = child as Phaser.GameObjects.Components.Transform & { destroy: () => void };
+    if (obj.x < -150) obj.destroy();
+  };
+
   private cleanOffscreen(group: Phaser.Physics.Arcade.Group) {
-    group.getChildren().forEach((child) => {
-      const obj = child as Phaser.GameObjects.Components.Transform & { destroy: () => void };
-      if (obj.x < -150) obj.destroy();
-    });
+    group.getChildren().forEach(this.destroyIfOffscreen);
   }
 
   reset() {

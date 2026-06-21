@@ -2,13 +2,19 @@ import Phaser from 'phaser';
 import { FONT_FAMILY } from '../config/gameConfig';
 import {
   playerSprites,
-  obstacleImages,
-  collectableImages,
+  wilfAnimFrames,
+  ruthAnimFrames,
+  workGoodImages,
+  workBadImages,
+  playGoodImages,
+  playBadImages,
   synergyLetters,
   backgroundImages,
   uiImages,
   menuImages,
+  comicImages,
 } from '../config/assetManifest';
+import { initSfx } from '../ui/sfxPlayer';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -42,14 +48,22 @@ export class PreloadScene extends Phaser.Scene {
       });
     }
 
-    const allImages = [...obstacleImages, ...collectableImages, ...synergyLetters, ...backgroundImages, ...uiImages, ...menuImages];
+    for (const animFrames of [wilfAnimFrames, ruthAnimFrames]) {
+      for (const frames of Object.values(animFrames)) {
+        for (const frame of frames) {
+          this.load.image(frame.key, frame.path);
+        }
+      }
+    }
+
+    const allImages = [...workGoodImages, ...workBadImages, ...playGoodImages, ...playBadImages, ...synergyLetters, ...backgroundImages, ...uiImages, ...menuImages, ...comicImages];
     for (const img of allImages) {
       this.load.image(img.key, img.path);
     }
 
-    this.load.audio('bgm', 'assets/audio/music/Crashed the wedding 8 bit.mp3');
-    this.load.audio('menu-bgm', 'assets/audio/music/Wedding March Chiptune 8 Bit.mp3');
-
+    // Music streams via an HTML5 <audio> element (see musicPlayer.ts), so it is
+    // intentionally NOT loaded through Phaser/WebAudio here: iOS fails to decode
+    // these multi-minute tracks into memory, which silently breaks playback.
     this.load.audio('sfx-jump', 'assets/audio/soundFX/Jump.mp3');
     this.load.audio('sfx-run', 'assets/audio/soundFX/Running loop.mp3');
     this.load.audio('sfx-collect', 'assets/audio/soundFX/good asset collect.mp3');
@@ -60,6 +74,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create() {
+    initSfx();
     this.scene.start('MenuScene');
   }
 }

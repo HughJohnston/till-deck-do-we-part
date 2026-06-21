@@ -8,20 +8,19 @@ export const PLAYER_X_RATIO = 0.15;
 
 // Native texture heights of the background layers (px)
 export const BG_TEXTURE_HEIGHTS = {
-  sky: 450,
-  mid: 450,
-  street: 200,
+  sky: 172,
+  street: 400,
   ground: 250,
 } as const;
 
 // Tunable environment layout. The datum is the running surface line.
 // Ground top + street bottom both anchor to the datum. Mutated live by test mode.
 export const ENV_LAYOUT = {
-  datumRatio: 1 - GROUND_HEIGHT_RATIO,
-  streetBandRatio: 0.3,
+  datumRatio: 0.815,
+  streetBandRatio: 0.55,
+  skyBandRatio: 0.67,
   scroll: {
     sky: 0.1,
-    mid: 0.3,
     street: 0.9,
     ground: 1.0,
   },

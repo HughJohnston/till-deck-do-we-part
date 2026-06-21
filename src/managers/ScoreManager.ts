@@ -9,7 +9,7 @@ export class ScoreManager {
   get isHoneymoonMode() { return this._isHoneymoonMode; }
 
   get scoreLabel() {
-    return this._isHoneymoonMode ? 'Holiday Time' : 'Billable Hours';
+    return this._isHoneymoonMode ? 'Holiday Time' : 'Slides made';
   }
 
   update(delta: number, currentSpeed: number) {
@@ -29,8 +29,10 @@ export class ScoreManager {
     }
   }
 
-  addCollectablePoints() {
-    this.score += difficultyConfig.collectablePoints * this.multiplier;
+  addCollectablePoints(): number {
+    const points = difficultyConfig.collectablePoints * this.multiplier;
+    this.score += points;
+    return points;
   }
 
   activateSynergyMultiplier() {

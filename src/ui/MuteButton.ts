@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { FONT_FAMILY } from '../config/gameConfig';
+import { setMusicMuted } from './musicPlayer';
+import { setSfxMuted } from './sfxPlayer';
 
 const STORAGE_KEY = 'tilldeck_muted';
 
@@ -15,6 +17,8 @@ export function createMuteButton(scene: Phaser.Scene): Phaser.GameObjects.Text {
   const w = scene.scale.width;
   const muted = isMuted();
   scene.sound.mute = muted;
+  setMusicMuted(muted);
+  setSfxMuted(muted);
 
   const btn = scene.add.text(w - 12, 12, muted ? '🔇' : '🔊', {
     fontSize: '20px',
@@ -27,6 +31,8 @@ export function createMuteButton(scene: Phaser.Scene): Phaser.GameObjects.Text {
   btn.on('pointerdown', () => {
     const nowMuted = !scene.sound.mute;
     scene.sound.mute = nowMuted;
+    setMusicMuted(nowMuted);
+    setSfxMuted(nowMuted);
     saveMuted(nowMuted);
     btn.setText(nowMuted ? '🔇' : '🔊');
   });

@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { getGroundY, getGroundHeight, getPlayerX, JUMP_VELOCITY, PLAYER_SIZE } from '../utils/constants';
+import { wilfAnimFrames, ruthAnimFrames, CharacterAnimFrames } from '../config/assetManifest';
+import { FONT_FAMILY } from '../config/gameConfig';
 import { ENV_LAYOUT, BG_TEXTURE_HEIGHTS } from '../config/dimensions';
 import { difficultyConfig } from '../config/difficultyConfig';
 import { DifficultyManager } from '../managers/DifficultyManager';
@@ -7,17 +9,21 @@ import { ScoreManager } from '../managers/ScoreManager';
 import { SynergyManager } from '../managers/SynergyManager';
 import { SpawnManager } from '../managers/SpawnManager';
 import { createMuteButton } from '../ui/MuteButton';
-import { isMuted } from '../ui/MuteButton';
 import { registerUiSound } from '../ui/uiSound';
+import { registerAudioConsole } from '../ui/AudioConsole';
 import { stopMenuMusic } from '../ui/menuMusic';
+import { playMusic, stopMusic } from '../ui/musicPlayer';
+import { playSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlayer';
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private ground!: Phaser.Physics.Arcade.StaticGroup;
   private skyLayer!: Phaser.GameObjects.TileSprite;
-  private midLayer!: Phaser.GameObjects.TileSprite;
-  private streetLayer!: Phaser.GameObjects.TileSprite;
   private groundLayer!: Phaser.GameObjects.TileSprite;
+
+  private streetSegments: Phaser.GameObjects.Image[] = [];
+  private nextStreetIsGap = false;
+  private static readonly STREET_SCENE_KEYS = ['bg-ryelane', 'bg-wingfield', 'bg-pubs', 'bg-ryelane2'];
 
   difficultyManager!: DifficultyManager;
   scoreManager!: ScoreManager;
@@ -28,20 +34,29 @@ export class GameScene extends Phaser.Scene {
   private wasHoneymoonMode = false;
   private jumpCount = 0;
   private maxJumps = 2;
-  private bgm?: Phaser.Sound.BaseSound;
-  private runSound?: Phaser.Sound.BaseSound;
   private character = 'wilf';
-  private readonly SFX_VOLUME = 0.6;
+  private runKey = 'run';
+  private jumpKey = 'jump';
+  private doubleJumpKey = 'double-jump';
   private synergyGoldTimer?: Phaser.Time.TimerEvent;
+  private obstacleCollider?: Phaser.Physics.Arcade.Collider;
 
   private testMode = false;
   private testScrollSpeed = 200;
   private testGraphics?: Phaser.GameObjects.Graphics;
   private testOverlay?: Phaser.GameObjects.Text;
 
+  private scrollVelocity = 0;
+
   constructor() {
     super('GameScene');
   }
+
+  // Hoisted so it can be passed to forEach without allocating a closure per frame.
+  private applyScrollVelocity = (child: Phaser.GameObjects.GameObject) => {
+    const body = (child as any).body as Phaser.Physics.Arcade.Body;
+    if (body) body.setVelocityX(this.scrollVelocity);
+  };
 
   create() {
     this.isGameOver = false;
@@ -58,10 +73,12 @@ export class GameScene extends Phaser.Scene {
     this.synergyManager = new SynergyManager();
 
     // Parallax backgrounds — created at origin, positioned/scaled by layoutEnvironment()
-    this.skyLayer = this.add.tileSprite(0, 0, w, h, 'bg-sky');
-    this.midLayer = this.add.tileSprite(0, 0, w, h, 'bg-mid');
-    this.streetLayer = this.add.tileSprite(0, 0, w, h, 'bg-street');
-    this.groundLayer = this.add.tileSprite(0, 0, w, h, 'bg-ground');
+    this.skyLayer = this.add.tileSprite(0, 0, w, h, 'bg-sky').setDepth(-4);
+    // Street is a sequence of image segments (see initStreetSegments), not a TileSprite.
+    this.groundLayer = this.add.tileSprite(0, 0, w, h, 'bg-ground').setDepth(-1);
+    this.streetSegments = [];
+    this.nextStreetIsGap = false;
+    this.initStreetSegments();
     this.layoutEnvironment();
 
     // Physics ground
@@ -75,29 +92,67 @@ export class GameScene extends Phaser.Scene {
     const character = this.registry.get('character') || 'wilf';
     this.character = character;
     const playerX = getPlayerX(w);
-    this.player = this.physics.add.sprite(playerX, groundY - PLAYER_SIZE / 2, character);
+    const animFrames: CharacterAnimFrames = character === 'ruth' ? ruthAnimFrames : wilfAnimFrames;
+    this.runKey = `${character}-run`;
+    this.jumpKey = `${character}-jump`;
+    this.doubleJumpKey = `${character}-double-jump`;
+    const firstTexture = animFrames.run[0].key;
+    // Collision box is inset from the full sprite so hits match the visible
+    // character. Lower factors = more forgiving collisions.
+    const bodyWidthFactor = 0.28;
+    const bodyHeightFactor = 0.44;
+    const worldBodyH = PLAYER_SIZE * bodyHeightFactor;
+    this.player = this.physics.add.sprite(playerX, groundY - worldBodyH / 2, firstTexture);
+    this.player.setDisplaySize(PLAYER_SIZE, PLAYER_SIZE);
     this.player.setCollideWorldBounds(true);
     this.player.setGravityY(0);
-    this.player.setSize(PLAYER_SIZE * 0.7, PLAYER_SIZE * 0.9);
+    this.player.setSize(
+      PLAYER_SIZE * bodyWidthFactor / this.player.scaleX,
+      PLAYER_SIZE * bodyHeightFactor / this.player.scaleY,
+    );
 
     this.physics.add.collider(this.player, this.ground, () => { this.jumpCount = 0; });
 
-    if (this.textures.get(character).frameTotal > 1) {
-      this.anims.create({ key: 'run', frames: this.anims.generateFrameNumbers(character, { start: 1, end: 3 }), frameRate: 10, repeat: -1 });
-      this.anims.create({ key: 'jump', frames: [{ key: character, frame: 4 }], frameRate: 1 });
-      this.player.play('run');
+    if (!this.anims.exists(this.runKey)) {
+      this.anims.create({
+        key: this.runKey,
+        frames: animFrames.run.map(f => ({ key: f.key })),
+        frameRate: 10,
+        repeat: -1,
+      });
     }
+    if (!this.anims.exists(this.jumpKey)) {
+      this.anims.create({
+        key: this.jumpKey,
+        frames: animFrames.jump.map(f => ({ key: f.key })),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+    if (!this.anims.exists(this.doubleJumpKey)) {
+      this.anims.create({
+        key: this.doubleJumpKey,
+        frames: animFrames.doubleJump.map(f => ({ key: f.key })),
+        frameRate: 14,
+        repeat: 0,
+      });
+    }
+    this.player.play(this.runKey);
 
     // Spawn manager
     this.spawnManager = new SpawnManager(this, this.difficultyManager);
     this.spawnManager.nextSynergyKey = () => `synergy-${this.synergyManager.nextLetterNeeded}`;
 
     this.physics.add.collider(this.player, this.spawnManager.platforms, () => { this.jumpCount = 0; });
-    this.physics.add.collider(this.player, this.spawnManager.obstacles, () => this.handleDeath());
+    this.obstacleCollider = this.physics.add.collider(this.player, this.spawnManager.obstacles, () => this.handleDeath());
     this.physics.add.overlap(this.player, this.spawnManager.collectables, (_p, c) => {
-      (c as Phaser.Physics.Arcade.Sprite).destroy();
-      this.scoreManager.addCollectablePoints();
-      this.playSfx('sfx-collect');
+      const sprite = c as Phaser.Physics.Arcade.Sprite;
+      const px = sprite.x;
+      const py = sprite.y;
+      sprite.destroy();
+      const points = this.scoreManager.addCollectablePoints();
+      this.showScorePopup(px, py, points);
+      playSfx('sfx-collect');
       this.events.emit('collectable-picked');
     });
     this.physics.add.overlap(this.player, this.spawnManager.synergyGroup, (_p, letter) => {
@@ -123,24 +178,18 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch('HudScene', { gameScene: this });
 
     stopMenuMusic(this);
-
-    if (this.cache.audio.exists('bgm') && !isMuted()) {
-      this.bgm = this.sound.add('bgm', { loop: true, volume: 0.4 });
-      this.bgm.play();
-    }
-
-    if (this.cache.audio.exists('sfx-run')) {
-      this.runSound = this.sound.add('sfx-run', { loop: true, volume: this.SFX_VOLUME });
-    }
+    playMusic('bgm');
 
     createMuteButton(this);
     registerUiSound(this);
+    registerAudioConsole(this);
 
     this.input.keyboard?.on('keydown-T', () => this.toggleTestMode());
 
     this.scale.on('resize', this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.handleResize, this);
+      stopRunSfx();
     });
   }
 
@@ -154,18 +203,12 @@ export class GameScene extends Phaser.Scene {
     const h = this.scale.height;
     const datumY = h * ENV_LAYOUT.datumRatio;
 
-    // Sky / Mid: fill the full viewport. Uniform tileScale prevents vertical tiling.
-    const skyScale = h / BG_TEXTURE_HEIGHTS.sky;
-    this.skyLayer.setSize(w, h).setPosition(w / 2, h / 2).setTileScale(skyScale);
-    const midScale = h / BG_TEXTURE_HEIGHTS.mid;
-    this.midLayer.setSize(w, h).setPosition(w / 2, h / 2).setTileScale(midScale);
-
-    // Street: bottom edge sits exactly on the datum.
-    const streetH = h * ENV_LAYOUT.streetBandRatio;
-    this.streetLayer
-      .setSize(w, streetH)
-      .setPosition(w / 2, datumY - streetH / 2)
-      .setTileScale(streetH / BG_TEXTURE_HEIGHTS.street);
+    // Sky: top-anchored, uniform scale preserves aspect ratio, tiles horizontally.
+    const skyH = h * ENV_LAYOUT.skyBandRatio;
+    const skyScale = skyH / BG_TEXTURE_HEIGHTS.sky;
+    this.skyLayer.setSize(w, skyH).setPosition(w / 2, skyH / 2).setTileScale(skyScale);
+    // Street segments: rescale and reposition all existing segments.
+    this.layoutStreetSegments();
 
     // Ground: top edge sits exactly on the datum, extends to the bottom of the screen.
     const groundBandH = h - datumY;
@@ -173,6 +216,65 @@ export class GameScene extends Phaser.Scene {
       .setSize(w, groundBandH)
       .setPosition(w / 2, datumY + groundBandH / 2)
       .setTileScale(groundBandH / BG_TEXTURE_HEIGHTS.ground);
+  }
+
+  private getStreetScale(): number {
+    return (this.scale.height * ENV_LAYOUT.streetBandRatio) / BG_TEXTURE_HEIGHTS.street;
+  }
+
+  private getStreetY(): number {
+    const h = this.scale.height;
+    return h * ENV_LAYOUT.datumRatio - h * ENV_LAYOUT.streetBandRatio;
+  }
+
+  private initStreetSegments() {
+    const w = this.scale.width;
+    const scale = this.getStreetScale();
+    const y = this.getStreetY();
+    let x = 0;
+    while (x < w + 1600 * scale) {
+      const seg = this.spawnStreetSegment(x, y, scale);
+      x += seg.displayWidth;
+    }
+  }
+
+  private spawnStreetSegment(x: number, y: number, scale: number): Phaser.GameObjects.Image {
+    let key: string;
+    if (this.nextStreetIsGap) {
+      key = 'bg-gap';
+    } else {
+      key = Phaser.Utils.Array.GetRandom(GameScene.STREET_SCENE_KEYS);
+    }
+    this.nextStreetIsGap = !this.nextStreetIsGap;
+    const img = this.add.image(x, y, key).setOrigin(0, 0).setScale(scale).setDepth(-2);
+    this.streetSegments.push(img);
+    return img;
+  }
+
+  private layoutStreetSegments() {
+    const newScale = this.getStreetScale();
+    const newY = this.getStreetY();
+    for (const seg of this.streetSegments) {
+      const oldScale = seg.scaleX;
+      if (oldScale > 0) seg.x = seg.x * (newScale / oldScale);
+      seg.setScale(newScale).y = newY;
+    }
+    this.fillStreetRight();
+  }
+
+  private fillStreetRight() {
+    const w = this.scale.width;
+    const scale = this.getStreetScale();
+    const y = this.getStreetY();
+    let rightEdge = 0;
+    if (this.streetSegments.length > 0) {
+      const last = this.streetSegments[this.streetSegments.length - 1];
+      rightEdge = last.x + last.displayWidth;
+    }
+    while (rightEdge < w + 400) {
+      const seg = this.spawnStreetSegment(rightEdge, y, scale);
+      rightEdge += seg.displayWidth;
+    }
   }
 
   private toggleTestMode() {
@@ -186,7 +288,7 @@ export class GameScene extends Phaser.Scene {
 
     // Stop gameplay: hide player, clear and freeze spawns.
     this.physics.pause();
-    if (this.runSound?.isPlaying) this.runSound.stop();
+    stopRunSfx();
     this.player.setVisible(false);
     this.spawnManager.obstacles.clear(true, true);
     this.spawnManager.collectables.clear(true, true);
@@ -205,6 +307,8 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-CLOSED_BRACKET', this.tuneStreetUp, this);
     this.input.keyboard?.on('keydown-MINUS', this.tuneSpeedDown, this);
     this.input.keyboard?.on('keydown-PLUS', this.tuneSpeedUp, this);
+    this.input.keyboard?.on('keydown-ONE', this.tuneSkyUp, this);
+    this.input.keyboard?.on('keydown-TWO', this.tuneSkyDown, this);
 
     this.drawTestGuides();
     this.updateTestOverlay();
@@ -216,6 +320,7 @@ export class GameScene extends Phaser.Scene {
     const h = this.scale.height;
     const datumY = h * ENV_LAYOUT.datumRatio;
     const streetTopY = datumY - h * ENV_LAYOUT.streetBandRatio;
+    const skyBottomY = h * ENV_LAYOUT.skyBandRatio;
 
     const g = this.testGraphics;
     g.clear();
@@ -227,20 +332,26 @@ export class GameScene extends Phaser.Scene {
     // Street top boundary
     g.lineStyle(1, 0xffd700, 0.8);
     g.lineBetween(0, streetTopY, w, streetTopY);
+
+    // Sky bottom edge
+    g.lineStyle(1, 0x88aaff, 0.6);
+    g.lineBetween(0, skyBottomY, w, skyBottomY);
   }
 
   private updateTestOverlay() {
     if (!this.testOverlay) return;
-    const { datumRatio, streetBandRatio } = ENV_LAYOUT;
+    const { datumRatio, streetBandRatio, skyBandRatio } = ENV_LAYOUT;
     this.testOverlay.setText([
       'TEST MODE  (T to exit)',
       `datumRatio:      ${datumRatio.toFixed(3)}   [Up/Down]`,
       `streetBandRatio: ${streetBandRatio.toFixed(3)}   [ [ / ] ]`,
+      `skyBandRatio:    ${skyBandRatio.toFixed(3)}   [1 / 2]`,
       `scrollSpeed:     ${this.testScrollSpeed.toFixed(0)}     [ - / + ]`,
     ].join('\n'));
     console.log('[env tuning]', {
       datumRatio: +datumRatio.toFixed(3),
       streetBandRatio: +streetBandRatio.toFixed(3),
+      skyBandRatio: +skyBandRatio.toFixed(3),
       scrollSpeed: Math.round(this.testScrollSpeed),
     });
   }
@@ -281,12 +392,33 @@ export class GameScene extends Phaser.Scene {
     this.updateTestOverlay();
   }
 
-  private playSfx(key: string, volume = this.SFX_VOLUME) {
-    if (this.cache.audio.exists(key)) this.sound.play(key, { volume });
+  private tuneSkyUp() {
+    ENV_LAYOUT.skyBandRatio = Phaser.Math.Clamp(ENV_LAYOUT.skyBandRatio + 0.01, 0.1, 1.0);
+    this.applyTuning();
+  }
+
+  private tuneSkyDown() {
+    ENV_LAYOUT.skyBandRatio = Phaser.Math.Clamp(ENV_LAYOUT.skyBandRatio - 0.01, 0.1, 1.0);
+    this.applyTuning();
+  }
+
+  private showScorePopup(x: number, y: number, amount: number) {
+    const popup = this.add.text(x, y, `+${amount} slides`, {
+      fontSize: '22px', color: '#33dd55', fontFamily: FONT_FAMILY,
+      stroke: '#0a3315', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(1000);
+    this.tweens.add({
+      targets: popup,
+      y: y - 50,
+      alpha: 0,
+      duration: 800,
+      ease: 'Cubic.easeOut',
+      onComplete: () => popup.destroy(),
+    });
   }
 
   private activateSynergyGold() {
-    this.playSfx('sfx-synergy');
+    playSfx('sfx-synergy');
     this.player.setTint(0xFFD700);
     this.synergyGoldTimer?.remove();
     this.synergyGoldTimer = this.time.delayedCall(difficultyConfig.synergyMultiplierDuration, () => {
@@ -300,10 +432,15 @@ export class GameScene extends Phaser.Scene {
     if (this.jumpCount < this.maxJumps) {
       this.player.setVelocityY(JUMP_VELOCITY);
       this.jumpCount++;
-      if (this.anims.exists('jump')) this.player.play('jump');
-      // Jump sound is intentionally half the volume of other SFX.
-      this.playSfx('sfx-jump', this.SFX_VOLUME * 0.5);
-      if (this.runSound?.isPlaying) this.runSound.stop();
+      const animKey = this.jumpCount === 1 ? this.jumpKey : this.doubleJumpKey;
+      if (this.anims.exists(animKey)) {
+        this.player.play(animKey);
+        this.player.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+          if (!this.isOnGround()) this.player.anims.pause();
+        });
+      }
+      playSfx('sfx-jump');
+      stopRunSfx();
     }
   }
 
@@ -321,9 +458,21 @@ export class GameScene extends Phaser.Scene {
       layer.tilePositionX += (speed * mult * dt) / s;
     };
     advance(this.skyLayer, ENV_LAYOUT.scroll.sky);
-    advance(this.midLayer, ENV_LAYOUT.scroll.mid);
-    advance(this.streetLayer, ENV_LAYOUT.scroll.street);
     advance(this.groundLayer, ENV_LAYOUT.scroll.ground);
+
+    // Street segments scroll as discrete images rather than a TileSprite.
+    const streetDx = speed * ENV_LAYOUT.scroll.street * dt;
+    for (const seg of this.streetSegments) seg.x -= streetDx;
+
+    // Recycle segments that have left the screen.
+    while (this.streetSegments.length > 0) {
+      const first = this.streetSegments[0];
+      if (first.x + first.displayWidth < -50) {
+        first.destroy();
+        this.streetSegments.shift();
+      } else break;
+    }
+    this.fillStreetRight();
   }
 
   update(_time: number, delta: number) {
@@ -344,14 +493,14 @@ export class GameScene extends Phaser.Scene {
     const dt = delta / 1000;
     this.scrollLayers(speed, dt);
 
-    const updateVelocity = (child: Phaser.GameObjects.GameObject) => {
-      const body = (child as any).body as Phaser.Physics.Arcade.Body;
-      if (body) body.setVelocityX(-speed);
-    };
-    this.spawnManager.obstacles.getChildren().forEach(updateVelocity);
-    this.spawnManager.collectables.getChildren().forEach(updateVelocity);
-    this.spawnManager.synergyGroup.getChildren().forEach(updateVelocity);
-    this.spawnManager.platforms.getChildren().forEach(updateVelocity);
+    // Reuse a single hoisted handler (see applyScrollVelocity) instead of
+    // allocating a fresh closure every frame, which keeps GC pauses (a common
+    // source of mobile judder) to a minimum.
+    this.scrollVelocity = -speed;
+    this.spawnManager.obstacles.getChildren().forEach(this.applyScrollVelocity);
+    this.spawnManager.collectables.getChildren().forEach(this.applyScrollVelocity);
+    this.spawnManager.synergyGroup.getChildren().forEach(this.applyScrollVelocity);
+    this.spawnManager.platforms.getChildren().forEach(this.applyScrollVelocity);
 
     // Keep player at fixed X
     this.player.x = getPlayerX(w);
@@ -359,15 +508,14 @@ export class GameScene extends Phaser.Scene {
     const onGround = this.isOnGround();
     if (onGround) this.jumpCount = 0;
 
-    if (onGround && this.anims.exists('run') && this.player.anims.currentAnim?.key !== 'run') {
-      this.player.play('run');
+    if (onGround && this.anims.exists(this.runKey) && this.player.anims.currentAnim?.key !== this.runKey) {
+      this.player.anims.resume();
+      this.player.play(this.runKey);
     }
 
     // Running loop plays only while in contact with the ground.
-    if (this.runSound) {
-      if (onGround && !this.runSound.isPlaying) this.runSound.play();
-      else if (!onGround && this.runSound.isPlaying) this.runSound.stop();
-    }
+    if (onGround && !isRunSfxPlaying()) startRunSfx();
+    else if (!onGround && isRunSfxPlaying()) stopRunSfx();
 
     if (this.scoreManager.isHoneymoonMode && !this.wasHoneymoonMode) {
       this.wasHoneymoonMode = true;
@@ -383,16 +531,34 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver) return;
     this.isGameOver = true;
 
-    this.player.setTint(0xff0000);
-    this.player.setVelocity(0, -200);
-    this.physics.pause();
+    stopRunSfx();
+    playSfx(this.character === 'ruth' ? 'sfx-grunt-female' : 'sfx-grunt-male');
+    stopMusic();
 
-    if (this.runSound?.isPlaying) this.runSound.stop();
-    this.playSfx(this.character === 'ruth' ? 'sfx-grunt-female' : 'sfx-grunt-male');
+    // Trip, fall and skid rather than stopping dead. Physics keeps running
+    // (update() early-returns on isGameOver, so the player is no longer pinned
+    // to its fixed X and tumbles freely under gravity).
+    this.obstacleCollider?.destroy();
+    this.player.anims.stop();
+    this.player.setTint(0xff8888);
+    this.player.setVelocity(220, -260);
+    this.player.setAngularVelocity(520);
+    this.player.setDragX(180);
+    this.player.setAngularDrag(220);
 
-    if (this.bgm) this.bgm.stop();
+    // Freeze the world so the focus is the player's tumble.
+    const freeze = (group: Phaser.Physics.Arcade.Group) => {
+      group.getChildren().forEach((child) => {
+        const body = (child as any).body as Phaser.Physics.Arcade.Body;
+        if (body) body.setVelocityX(0);
+      });
+    };
+    freeze(this.spawnManager.obstacles);
+    freeze(this.spawnManager.collectables);
+    freeze(this.spawnManager.synergyGroup);
+    freeze(this.spawnManager.platforms);
 
-    this.time.delayedCall(800, () => {
+    this.time.delayedCall(1400, () => {
       this.scene.stop('HudScene');
       this.scene.start('GameOverScene', {
         score: this.scoreManager.getDisplayScore(),

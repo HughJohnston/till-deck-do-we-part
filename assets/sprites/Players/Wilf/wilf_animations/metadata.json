@@ -1,0 +1,78 @@
+{
+  "group_id": null,
+  "states": [
+    {
+      "character": {
+        "id": "c6202e07-fcc0-4753-9788-e19acfa6da25",
+        "name": "A guy with messy brown",
+        "prompt": "A guy with messy brown hair in a sage green suit with a green tie. he has brown shoes",
+        "size": {
+          "width": 128,
+          "height": 128
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "side",
+        "created_at": "2026-06-20T16:03:22.625344+00:00"
+      },
+      "folder": "A_guy_with_messy_brown",
+      "frames": {
+        "rotations": {
+          "south": "A_guy_with_messy_brown/rotations/south.png",
+          "south-east": "A_guy_with_messy_brown/rotations/south-east.png",
+          "east": "A_guy_with_messy_brown/rotations/east.png",
+          "north-east": "A_guy_with_messy_brown/rotations/north-east.png",
+          "north": "A_guy_with_messy_brown/rotations/north.png",
+          "north-west": "A_guy_with_messy_brown/rotations/north-west.png",
+          "west": "A_guy_with_messy_brown/rotations/west.png",
+          "south-west": "A_guy_with_messy_brown/rotations/south-west.png"
+        },
+        "animations": {
+          "Running": {
+            "south": [
+              "A_guy_with_messy_brown/animations/Running/south/frame_000.png",
+              "A_guy_with_messy_brown/animations/Running/south/frame_001.png",
+              "A_guy_with_messy_brown/animations/Running/south/frame_002.png",
+              "A_guy_with_messy_brown/animations/Running/south/frame_003.png",
+              "A_guy_with_messy_brown/animations/Running/south/frame_004.png",
+              "A_guy_with_messy_brown/animations/Running/south/frame_005.png"
+            ],
+            "east": [
+              "A_guy_with_messy_brown/animations/Running/east/frame_000.png",
+              "A_guy_with_messy_brown/animations/Running/east/frame_001.png",
+              "A_guy_with_messy_brown/animations/Running/east/frame_002.png",
+              "A_guy_with_messy_brown/animations/Running/east/frame_003.png",
+              "A_guy_with_messy_brown/animations/Running/east/frame_004.png",
+              "A_guy_with_messy_brown/animations/Running/east/frame_005.png"
+            ]
+          },
+          "Front_Flip": {
+            "east": [
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_000.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_001.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_002.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_003.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_004.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_005.png",
+              "A_guy_with_messy_brown/animations/Front_Flip/east/frame_006.png"
+            ]
+          },
+          "Running_Jump": {
+            "east": [
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_000.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_001.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_002.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_003.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_004.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_005.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_006.png",
+              "A_guy_with_messy_brown/animations/Running_Jump/east/frame_007.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.0",
+  "export_date": "2026-06-20T17:25:40.559821"
+}
