@@ -15,6 +15,7 @@ import {
   comicImages,
 } from '../config/assetManifest';
 import { initSfx } from '../ui/sfxPlayer';
+import { setBackgroundLinearFilter } from '../utils/scrollVisuals';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -74,6 +75,10 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create() {
+    setBackgroundLinearFilter(
+      this.textures,
+      backgroundImages.map((img) => img.key),
+    );
     initSfx();
     this.scene.start('MenuScene');
   }

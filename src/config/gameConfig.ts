@@ -13,7 +13,7 @@ import { AudioConsoleScene } from '../ui/AudioConsole';
 export const FONT_FAMILY = 'Minecraft, monospace';
 
 // Bump this on each deploy so the build can be identified on-device.
-export const GAME_VERSION = 'v0.6.0';
+export const GAME_VERSION = 'v0.7.0';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -22,6 +22,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     parent: 'game-container',
     width: '100%',
     height: '100%',
+    autoRound: true,
   },
   physics: {
     default: 'arcade',
@@ -42,6 +43,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   render: {
     pixelArt: true,
     antialias: false,
+    roundPixels: true,
     powerPreference: 'high-performance',
   },
   input: {
