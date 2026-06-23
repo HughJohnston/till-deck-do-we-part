@@ -14,8 +14,6 @@ import {
 import { difficultyConfig } from '../config/difficultyConfig';
 import { DifficultyManager } from './DifficultyManager';
 
-type ScrollObject = Phaser.GameObjects.GameObject & { worldX?: number; x: number };
-
 export class SpawnManager {
   private scene: Phaser.Scene;
   private difficultyManager: DifficultyManager;
@@ -62,48 +60,35 @@ export class SpawnManager {
     return this.isHoneymoonMode ? playGoodImages : workGoodImages;
   }
 
-  update(delta: number, scroll: number) {
+  update(delta: number) {
+    const speed = this.difficultyManager.currentSpeed;
+
     this.obstacleTimer += delta;
     this.collectableTimer += delta;
     this.synergyTimer += delta;
     this.platformTimer += delta;
 
     if (this.obstacleTimer >= this.difficultyManager.getObstacleSpawnInterval()) {
-      this.spawnObstacle(scroll);
+      this.spawnObstacle(speed);
       this.obstacleTimer = 0;
     }
     if (this.collectableTimer >= this.difficultyManager.getCollectableSpawnInterval()) {
-      this.spawnCollectable(scroll);
+      this.spawnCollectable(speed);
       this.collectableTimer = 0;
     }
     if (this.synergyTimer >= this.difficultyManager.getSynergySpawnInterval()) {
-      this.spawnSynergyLetter(scroll);
+      this.spawnSynergyLetter(speed);
       this.synergyTimer = 0;
     }
     if (this.platformTimer >= this.difficultyManager.getPlatformSpawnInterval()) {
-      this.spawnPlatform(scroll);
+      this.spawnPlatform(speed);
       this.platformTimer = 0;
     }
 
-    this.cleanOffscreen(this.obstacles, scroll);
-    this.cleanOffscreen(this.collectables, scroll);
-    this.cleanOffscreen(this.synergyGroup, scroll);
-    this.cleanOffscreen(this.platforms, scroll);
-  }
-
-  syncPositionsFromScroll(scroll: number) {
-    this.obstacles.getChildren().forEach((child) => this.syncObject(child, scroll));
-    this.collectables.getChildren().forEach((child) => this.syncObject(child, scroll));
-    this.synergyGroup.getChildren().forEach((child) => this.syncObject(child, scroll));
-    this.platforms.getChildren().forEach((child) => this.syncObject(child, scroll));
-  }
-
-  private syncObject(child: Phaser.GameObjects.GameObject, scroll: number) {
-    const obj = child as ScrollObject;
-    if (obj.worldX == null) return;
-    obj.x = Math.round(obj.worldX - scroll);
-    const body = (obj as Phaser.Physics.Arcade.Sprite).body;
-    if (body) body.updateFromGameObject();
+    this.cleanOffscreen(this.obstacles);
+    this.cleanOffscreen(this.collectables);
+    this.cleanOffscreen(this.synergyGroup);
+    this.cleanOffscreen(this.platforms);
   }
 
   private get w() { return this.scene.scale.width; }
@@ -127,19 +112,17 @@ export class SpawnManager {
     return check(this.obstacles) || check(this.collectables) || check(this.synergyGroup);
   }
 
-  private spawnObstacle(scroll: number) {
+  private spawnObstacle(speed: number) {
     const pool = this.obstaclePool;
     const def = Phaser.Utils.Array.GetRandom(pool);
-    const worldX = scroll + this.w + def.width;
-    const x = worldX - scroll;
+    const x = this.w + def.width;
     const y = this.groundY - def.height / 2;
     if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
-    const obj = this.obstacles.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite & ScrollObject;
+    const obj = this.obstacles.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setScale(0.6);
-    obj.setVelocityX(0);
+    obj.setVelocityX(-speed);
     (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
-    obj.worldX = worldX;
     (obj as any).assetKey = def.key;
   }
 
@@ -152,68 +135,61 @@ export class SpawnManager {
     return this.groundY - Phaser.Math.Between(COLLECTABLE_Y_DOUBLE_JUMP_MIN, COLLECTABLE_Y_DOUBLE_JUMP_MAX);
   }
 
-  private spawnCollectable(scroll: number) {
+  private spawnCollectable(speed: number) {
     const pool = this.collectablePool;
     const def = Phaser.Utils.Array.GetRandom(pool);
-    const worldX = scroll + this.w + def.width;
-    const x = worldX - scroll;
+    const x = this.w + def.width;
     const y = this.spawnCollectableY(def.height);
     if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
-    const obj = this.collectables.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite & ScrollObject;
+    const obj = this.collectables.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
     obj.setScale(0.6);
-    obj.setVelocityX(0);
+    obj.setVelocityX(-speed);
     (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
-    obj.worldX = worldX;
     (obj as any).assetKey = def.key;
   }
 
-  private spawnSynergyLetter(scroll: number) {
+  private spawnSynergyLetter(speed: number) {
     if (this.synergyGroup.getLength() > 0) return;
     const nextKey = this.nextSynergyKey?.();
     const def = (nextKey && synergyLetters.find((l) => l.key === nextKey)) || synergyLetters[0];
-    const worldX = scroll + this.w + def.width;
-    const x = worldX - scroll;
+    const x = this.w + def.width;
     const y = Phaser.Math.Between(this.groundY - 140, this.groundY - 40);
     if (this.wouldOverlap(x, y, def.width, def.height)) return;
 
-    const obj = this.synergyGroup.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite & ScrollObject;
-    obj.setVelocityX(0);
+    const obj = this.synergyGroup.create(x, y, def.key) as Phaser.Physics.Arcade.Sprite;
+    obj.setVelocityX(-speed);
     (obj.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     obj.setTint(0xFFD700);
-    obj.worldX = worldX;
     (obj as any).assetKey = def.key;
   }
 
-  private spawnPlatform(scroll: number) {
+  private spawnPlatform(speed: number) {
     const platformWidth = Phaser.Math.Between(80, 150);
     const platformHeight = 16;
-    const worldX = scroll + this.w + platformWidth;
-    const x = worldX - scroll;
+    const x = this.w + platformWidth;
     const y = Phaser.Math.Between(this.groundY - 110, this.groundY - 60);
 
-    const platform = this.scene.add.rectangle(x, y, platformWidth, platformHeight, 0x8B7355) as Phaser.GameObjects.Rectangle & ScrollObject;
+    const platform = this.scene.add.rectangle(x, y, platformWidth, platformHeight, 0x8B7355);
     platform.setStrokeStyle(1, 0x6B5335);
     this.platforms.add(platform);
 
     const body = platform.body as Phaser.Physics.Arcade.Body;
     body.allowGravity = false;
     body.setImmovable(true);
-    body.setVelocityX(0);
+    body.setVelocityX(-speed);
     body.checkCollision.down = false;
     body.checkCollision.left = false;
     body.checkCollision.right = false;
-    platform.worldX = worldX;
   }
 
-  private destroyIfOffscreen = (child: Phaser.GameObjects.GameObject, scroll: number) => {
-    const obj = child as ScrollObject;
-    const screenX = obj.worldX != null ? obj.worldX - scroll : obj.x;
-    if (screenX < -150) obj.destroy();
+  private destroyIfOffscreen = (child: Phaser.GameObjects.GameObject) => {
+    const obj = child as Phaser.Physics.Arcade.Sprite;
+    if (obj.x < -150) obj.destroy();
   };
 
-  private cleanOffscreen(group: Phaser.Physics.Arcade.Group, scroll: number) {
-    group.getChildren().forEach((child) => this.destroyIfOffscreen(child, scroll));
+  private cleanOffscreen(group: Phaser.Physics.Arcade.Group) {
+    group.getChildren().forEach(this.destroyIfOffscreen);
   }
 
   reset() {
