@@ -11,3 +11,13 @@ export function setBackgroundLinearFilter(
     }
   }
 }
+
+/** Set tile scroll from the authoritative scroll distance (continuous; use with linear BG filtering). */
+export function applyTileScroll(
+  layer: Phaser.GameObjects.TileSprite,
+  scroll: number,
+  parallax: number,
+): void {
+  const scale = layer.tileScaleX || 1;
+  layer.tilePositionX = (scroll * parallax) / scale;
+}

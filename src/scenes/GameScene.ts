@@ -19,8 +19,15 @@ import {
   isUnlocked,
 } from '../services/HoneymoonProgressService';
 import { submitScore } from '../services/LeaderboardService';
+import { applyTileScroll } from '../utils/scrollVisuals';
 
 export type GameMode = 'normal' | 'honeymoon';
+
+interface StreetSegment {
+  image: Phaser.GameObjects.Image;
+  /** Left edge in street-parallax space: screenX = worldLeft - scroll * streetMult */
+  worldLeft: number;
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -28,9 +35,13 @@ export class GameScene extends Phaser.Scene {
   private skyLayer!: Phaser.GameObjects.TileSprite;
   private groundLayer!: Phaser.GameObjects.TileSprite;
 
-  private streetSegments: Phaser.GameObjects.Image[] = [];
+  private streetSegments: StreetSegment[] = [];
   private nextStreetIsGap = false;
   private static readonly STREET_SCENE_KEYS = ['bg-ryelane', 'bg-wingfield', 'bg-pubs', 'bg-ryelane2'];
+  private static readonly MAX_FRAME_DELTA_MS = 33;
+
+  /** Authoritative 1.0× horizontal distance (px). All layers derive from this. */
+  private scrollDistance = 0;
 
   difficultyManager!: DifficultyManager;
   scoreManager!: ScoreManager;
@@ -52,8 +63,6 @@ export class GameScene extends Phaser.Scene {
   private testScrollSpeed = 200;
   private testGraphics?: Phaser.GameObjects.Graphics;
   private testOverlay?: Phaser.GameObjects.Text;
-
-  private scrollVelocity = 0;
 
   private get isHoneymoonRun(): boolean {
     return this.gameMode === 'honeymoon';
@@ -95,15 +104,10 @@ export class GameScene extends Phaser.Scene {
     this.gameMode = data?.gameMode ?? 'normal';
   }
 
-  // Hoisted so it can be passed to forEach without allocating a closure per frame.
-  private applyScrollVelocity = (child: Phaser.GameObjects.GameObject) => {
-    const body = (child as any).body as Phaser.Physics.Arcade.Body;
-    if (body) body.setVelocityX(this.scrollVelocity);
-  };
-
   create() {
     this.isGameOver = false;
     this.jumpCount = 0;
+    this.scrollDistance = 0;
 
     const isHoneymoonRun = this.gameMode === 'honeymoon';
 
@@ -243,6 +247,7 @@ export class GameScene extends Phaser.Scene {
 
   private handleResize() {
     this.layoutEnvironment();
+    this.applyBackgroundFromScroll();
     if (this.testMode) this.drawTestGuides();
   }
 
@@ -277,14 +282,14 @@ export class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const scale = this.getStreetScale();
     const y = this.getStreetY();
-    let x = 0;
-    while (x < w + 1600 * scale) {
-      const seg = this.spawnStreetSegment(x, y, scale);
-      x += seg.displayWidth;
+    let worldLeft = 0;
+    while (worldLeft - this.scrollDistance * ENV_LAYOUT.scroll.street < w + 1600 * scale) {
+      const seg = this.spawnStreetSegment(worldLeft, y, scale);
+      worldLeft += seg.image.displayWidth;
     }
   }
 
-  private spawnStreetSegment(x: number, y: number, scale: number): Phaser.GameObjects.Image {
+  private spawnStreetSegment(worldLeft: number, y: number, scale: number): StreetSegment {
     let key: string;
     if (this.isHoneymoonRun) {
       key = 'bg-honeymoon-shore';
@@ -294,35 +299,82 @@ export class GameScene extends Phaser.Scene {
       key = Phaser.Utils.Array.GetRandom(GameScene.STREET_SCENE_KEYS);
     }
     if (!this.isHoneymoonRun) this.nextStreetIsGap = !this.nextStreetIsGap;
-    const img = this.add.image(x, y, key).setOrigin(0, 0).setScale(scale).setDepth(-2);
-    this.streetSegments.push(img);
-    return img;
+    const streetMult = ENV_LAYOUT.scroll.street;
+    const image = this.add
+      .image(worldLeft - this.scrollDistance * streetMult, y, key)
+      .setOrigin(0, 0)
+      .setScale(scale)
+      .setDepth(-2);
+    // Float positions + linear filter; avoid global roundPixels snapping on parallax art.
+    if ('setRoundPixels' in image) (image as Phaser.GameObjects.Image & { setRoundPixels(v: boolean): void }).setRoundPixels(false);
+    const segment = { image, worldLeft };
+    this.streetSegments.push(segment);
+    return segment;
   }
 
   private layoutStreetSegments() {
     const newScale = this.getStreetScale();
     const newY = this.getStreetY();
+    const streetMult = ENV_LAYOUT.scroll.street;
     for (const seg of this.streetSegments) {
-      const oldScale = seg.scaleX;
-      if (oldScale > 0) seg.x = seg.x * (newScale / oldScale);
-      seg.setScale(newScale).y = newY;
+      const oldScale = seg.image.scaleX;
+      if (oldScale > 0) {
+        seg.image.x = seg.image.x * (newScale / oldScale);
+      }
+      seg.image.setScale(newScale).y = newY;
+      seg.worldLeft = seg.image.x + this.scrollDistance * streetMult;
     }
-    this.fillStreetRight();
+    this.ensureStreetCoverage();
   }
 
-  private fillStreetRight() {
+  private ensureStreetCoverage() {
     const w = this.scale.width;
     const scale = this.getStreetScale();
     const y = this.getStreetY();
-    let rightEdge = 0;
+    const streetMult = ENV_LAYOUT.scroll.street;
+    const scroll = this.scrollDistance;
+    let rightScreen = 0;
     if (this.streetSegments.length > 0) {
       const last = this.streetSegments[this.streetSegments.length - 1];
-      rightEdge = last.x + last.displayWidth;
+      rightScreen = last.worldLeft - scroll * streetMult + last.image.displayWidth;
     }
-    while (rightEdge < w + 400) {
-      const seg = this.spawnStreetSegment(rightEdge, y, scale);
-      rightEdge += seg.displayWidth;
+    while (rightScreen < w + 400) {
+      const worldLeft = this.streetSegments.length > 0
+        ? this.streetSegments[this.streetSegments.length - 1].worldLeft +
+          this.streetSegments[this.streetSegments.length - 1].image.displayWidth
+        : 0;
+      const seg = this.spawnStreetSegment(worldLeft, y, scale);
+      rightScreen = seg.worldLeft - scroll * streetMult + seg.image.displayWidth;
     }
+  }
+
+  private recycleStreetSegments(): boolean {
+    const streetMult = ENV_LAYOUT.scroll.street;
+    const scroll = this.scrollDistance;
+    let recycled = false;
+    while (this.streetSegments.length > 0) {
+      const first = this.streetSegments[0];
+      const screenRight = first.worldLeft - scroll * streetMult + first.image.displayWidth;
+      if (screenRight < -50) {
+        first.image.destroy();
+        this.streetSegments.shift();
+        recycled = true;
+      } else break;
+    }
+    if (recycled) this.ensureStreetCoverage();
+    return recycled;
+  }
+
+  private applyBackgroundFromScroll() {
+    const scroll = this.scrollDistance;
+    applyTileScroll(this.skyLayer, scroll, ENV_LAYOUT.scroll.sky);
+    applyTileScroll(this.groundLayer, scroll, ENV_LAYOUT.scroll.ground);
+
+    const streetMult = ENV_LAYOUT.scroll.street;
+    for (const seg of this.streetSegments) {
+      seg.image.x = seg.worldLeft - scroll * streetMult;
+    }
+    this.recycleStreetSegments();
   }
 
   private toggleTestMode() {
@@ -500,35 +552,17 @@ export class GameScene extends Phaser.Scene {
     return body.touching.down || body.blocked.down;
   }
 
-  private scrollLayers(speed: number, dt: number) {
-    // tilePositionX is in texture space, so on-screen movement = delta * tileScaleX.
-    // Divide by tileScaleX so the scroll multipliers map directly to on-screen speed
-    // (otherwise layers with a larger tileScale appear to scroll faster).
-    const advance = (layer: Phaser.GameObjects.TileSprite, mult: number) => {
-      const s = layer.tileScaleX || 1;
-      layer.tilePositionX += (speed * mult * dt) / s;
-    };
-    advance(this.skyLayer, ENV_LAYOUT.scroll.sky);
-    advance(this.groundLayer, ENV_LAYOUT.scroll.ground);
-
-    // Street segments scroll as discrete images rather than a TileSprite.
-    const streetDx = speed * ENV_LAYOUT.scroll.street * dt;
-    for (const seg of this.streetSegments) seg.x -= streetDx;
-
-    // Recycle segments that have left the screen.
-    while (this.streetSegments.length > 0) {
-      const first = this.streetSegments[0];
-      if (first.x + first.displayWidth < -50) {
-        first.destroy();
-        this.streetSegments.shift();
-      } else break;
-    }
-    this.fillStreetRight();
+  private advanceWorldScroll(speed: number, dt: number) {
+    this.scrollDistance += speed * dt;
+    this.applyBackgroundFromScroll();
+    this.spawnManager.syncToScroll(this.scrollDistance);
   }
 
   update(_time: number, delta: number) {
+    const dt = Math.min(delta, GameScene.MAX_FRAME_DELTA_MS) / 1000;
+
     if (this.testMode) {
-      this.scrollLayers(this.testScrollSpeed, delta / 1000);
+      this.advanceWorldScroll(this.testScrollSpeed, dt);
       return;
     }
 
@@ -538,20 +572,10 @@ export class GameScene extends Phaser.Scene {
 
     this.difficultyManager.update(delta);
     this.scoreManager.update(delta, this.difficultyManager.currentSpeed);
-    this.spawnManager.update(delta);
+    this.spawnManager.update(delta, this.scrollDistance);
 
     const speed = this.difficultyManager.currentSpeed;
-    const dt = delta / 1000;
-    this.scrollLayers(speed, dt);
-
-    // Reuse a single hoisted handler (see applyScrollVelocity) instead of
-    // allocating a fresh closure every frame, which keeps GC pauses (a common
-    // source of mobile judder) to a minimum.
-    this.scrollVelocity = -speed;
-    this.spawnManager.obstacles.getChildren().forEach(this.applyScrollVelocity);
-    this.spawnManager.collectables.getChildren().forEach(this.applyScrollVelocity);
-    this.spawnManager.synergyGroup.getChildren().forEach(this.applyScrollVelocity);
-    this.spawnManager.platforms.getChildren().forEach(this.applyScrollVelocity);
+    this.advanceWorldScroll(speed, dt);
 
     // Keep player at fixed X
     this.player.x = getPlayerX(w);

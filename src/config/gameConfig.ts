@@ -13,7 +13,7 @@ import { AudioConsoleScene } from '../ui/AudioConsole';
 export const FONT_FAMILY = 'Minecraft, monospace';
 
 // Bump this on each deploy so the build can be identified on-device.
-export const GAME_VERSION = 'v0.7.1';
+export const GAME_VERSION = 'v0.7.2';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
