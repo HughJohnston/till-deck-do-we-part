@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" sizes="180x180" href="/apple-touch-icon.png" />
+  <title>Stats — Till Deck Do We Part</title>
+  <style>
+    @font-face {
+      font-family: 'Minecraft';
+      src: url('/assets/font/Minecraft.ttf') format('truetype');
+      font-display: swap;
+    }
+    :root {
+      --bg: #1a1a2e;
+      --panel: #252545;
+      --border: #4a90d9;
+      --gold: #ffd700;
+      --text: #ffffff;
+      --muted: #aaaacc;
+      --green: #44dd66;
+      --orange: #ff8844;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Minecraft', monospace;
+      line-height: 1.5;
+      padding: 1.25rem;
+    }
+    a { color: var(--gold); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    h1 {
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+      color: var(--gold);
+      letter-spacing: 0.02em;
+    }
+    .sub { color: var(--muted); font-size: 0.85rem; }
+    main { max-width: 1200px; margin: 0 auto; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 2px solid rgba(74, 144, 217, 0.55);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+    .card-label { font-size: 0.7rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .card-value { font-size: 1.35rem; color: var(--gold); word-break: break-word; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    label { color: var(--muted); font-size: 0.8rem; }
+    select, button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      background: var(--panel);
+      color: var(--text);
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      padding: 0.45rem 0.65rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--gold); color: var(--gold); }
+    .panel {
+      background: rgba(26, 26, 46, 0.62);
+      border: 2px solid rgba(74, 144, 217, 0.8);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    th, td {
+      padding: 0.55rem 0.65rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--gold);
+      font-weight: normal;
+      position: sticky;
+      top: 0;
+    }
+    tr:nth-child(even) td { background: rgba(255, 255, 255, 0.03); }
+    tr:hover td { background: rgba(255, 215, 0, 0.08); }
+    .rank { color: var(--muted); width: 2rem; }
+    .name { color: var(--text); font-weight: bold; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .status {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted);
+    }
+    .status.error { color: #ff8888; }
+    .leaders {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .leader-card h2 {
+      font-size: 0.85rem;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
+    .leader-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      padding: 0.2rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .leader-row:last-child { border-bottom: none; }
+    .leader-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+    .leader-val { color: var(--green); flex-shrink: 0; }
+    footer {
+      max-width: 1200px;
+      margin: 1.5rem auto 0;
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>PLAYER STATS</h1>
+      <p class="sub">Till Deck Do We Part — live from Supabase</p>
+    </div>
+    <p class="sub"><a href="/">← Back to game</a></p>
+  </header>
+  <main id="app">
+    <p class="status">Loading stats…</p>
+  </main>
+  <footer id="footer"></footer>
+  <script type="module" src="/src/stats/dashboard.ts"></script>
+</body>
+</html>

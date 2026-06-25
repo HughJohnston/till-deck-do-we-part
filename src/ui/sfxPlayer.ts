@@ -15,15 +15,20 @@ import { getAudioVolume } from './AudioConsole';
 
 const SFX: Record<string, string> = {
   'sfx-jump': 'assets/audio/soundFX/Jump.mp3',
+  'sfx-fart-1': 'assets/audio/soundFX/wilf_farts/fart1.mp3',
+  'sfx-fart-2': 'assets/audio/soundFX/wilf_farts/fart2.mp3',
+  'sfx-fart-3': 'assets/audio/soundFX/wilf_farts/fart3.mp3',
   'sfx-run': 'assets/audio/soundFX/Running loop.mp3',
   'sfx-collect': 'assets/audio/soundFX/good asset collect.mp3',
   'sfx-grunt-male': 'assets/audio/soundFX/male grunt.mp3',
   'sfx-grunt-female': 'assets/audio/soundFX/female grunt.mp3',
   'sfx-ui': 'assets/audio/soundFX/UI button press.mp3',
   'sfx-synergy': 'assets/audio/soundFX/synergy.mp3',
+  'sfx-synergy-collect': 'assets/audio/soundFX/synergy collect.mp3',
 };
 
 const RUN_KEY = 'sfx-run';
+const WILF_FART_KEYS = ['sfx-fart-1', 'sfx-fart-2', 'sfx-fart-3'] as const;
 
 // How many simultaneous voices each one-shot needs. Collect fires in rapid
 // bursts and benefits from overlap; everything else rarely overlaps itself.
@@ -93,6 +98,15 @@ function bindUnlock() {
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('touchend', unlock);
   window.addEventListener('keydown', unlock);
+}
+
+export function playJumpSfx(character: 'wilf' | 'ruth') {
+  if (character === 'wilf') {
+    const key = WILF_FART_KEYS[Math.floor(Math.random() * WILF_FART_KEYS.length)];
+    playSfx(key, getAudioVolume('sfx-jump'));
+  } else {
+    playSfx('sfx-jump');
+  }
 }
 
 export function playSfx(key: string, volume?: number) {

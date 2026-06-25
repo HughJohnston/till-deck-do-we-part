@@ -6,6 +6,14 @@ import { registerAudioConsole } from '../ui/AudioConsole';
 import { playMenuMusic } from '../ui/menuMusic';
 import { UiButton, createButton } from '../ui/Button';
 import type { GameOverData } from './GameOverScene';
+import {
+  getSavedCharacter,
+  getSavedPlayerName,
+  hasReturningProfile,
+  resolvePlayerName,
+  saveCharacter,
+  savePlayerName,
+} from '../services/PlayerProfileService';
 
 type VisibleGameObject = Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible;
 
@@ -14,6 +22,9 @@ export type MenuMode = 'full' | 'name' | 'character';
 export interface MenuSceneData {
   mode?: MenuMode;
   returnTo?: { scene: string; data: GameOverData };
+  step?: 1 | 2;
+  draftName?: string;
+  draftCharacter?: 'wilf' | 'ruth';
 }
 
 interface MenuLayout {
@@ -67,6 +78,10 @@ export class MenuScene extends Phaser.Scene {
   private nameInput?: HTMLInputElement;
   private nameInputHandler?: (event: Event) => void;
   private nameInputKeyHandler?: (event: KeyboardEvent) => void;
+  private trophyButton?: Phaser.GameObjects.Image;
+  private initialStep?: 1 | 2;
+  private restoredDraftName?: string;
+  private restoredDraftCharacter?: 'wilf' | 'ruth';
 
   constructor() {
     super('MenuScene');
@@ -75,11 +90,19 @@ export class MenuScene extends Phaser.Scene {
   init(data?: MenuSceneData) {
     this.menuMode = data?.mode ?? 'full';
     this.returnTo = data?.returnTo;
+    this.initialStep = data?.step;
+    this.restoredDraftName = data?.draftName;
+    this.restoredDraftCharacter = data?.draftCharacter;
   }
 
   create() {
-    this.playerName = (this.registry.get('playerName') as string) ?? '';
-    this.step = this.menuMode === 'character' ? 2 : 1;
+    if (this.restoredDraftName !== undefined) {
+      this.playerName = this.restoredDraftName;
+    } else {
+      const registryName = (this.registry.get('playerName') as string) ?? '';
+      const savedName = getSavedPlayerName() ?? '';
+      this.playerName = registryName.trim() || savedName;
+    }
     this.isTouch = this.sys.game.device.input.touch;
     const layout = this.computeLayout(this.scale.width, this.scale.height);
 
@@ -170,12 +193,18 @@ export class MenuScene extends Phaser.Scene {
       this.ruthImage, this.ruthFrame, this.ruthName,
     ];
 
-    const savedChar = this.registry.get('character') as 'wilf' | 'ruth' | undefined;
-    this.selectCharacter(savedChar === 'ruth' ? 'ruth' : 'wilf');
+    const registryChar = this.registry.get('character') as 'wilf' | 'ruth' | undefined;
+    const savedChar = getSavedCharacter();
+    const character = this.restoredDraftCharacter
+      ?? savedChar
+      ?? (registryChar === 'ruth' ? 'ruth' : 'wilf');
+    this.selectCharacter(character);
     this.updateNameDisplay();
     this.updateNextButton();
     this.applyLayout(layout);
     if (this.menuMode === 'character') this.showStep(2);
+    else if (this.initialStep) this.showStep(this.initialStep);
+    else if (this.menuMode === 'full' && hasReturningProfile()) this.showStep(2);
     else this.showStep(1);
     registerUiSound(this);
     registerAudioConsole(this);
@@ -188,6 +217,7 @@ export class MenuScene extends Phaser.Scene {
     this.resizeHandler = (gameSize) => {
       this.applyLayout(this.computeLayout(gameSize.width, gameSize.height));
       versionText.setY(gameSize.height - 6);
+      this.trophyButton?.setPosition(12, 12);
     };
     this.scale.on('resize', this.resizeHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -196,6 +226,37 @@ export class MenuScene extends Phaser.Scene {
     });
 
     createMuteButton(this);
+    this.createTrophyButton();
+  }
+
+  private createTrophyButton() {
+    if (!this.textures.exists('ui-trophy')) return;
+
+    const iconSize = 36;
+    this.trophyButton = this.add.image(12, 12, 'ui-trophy')
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(1000);
+    this.trophyButton.setScale(iconSize / this.trophyButton.height);
+
+    this.trophyButton.on('pointerdown', () => this.openLeaderboard());
+  }
+
+  private openLeaderboard() {
+    this.cleanupAndLeave();
+    this.scene.start('LeaderboardScene', {
+      returnTo: {
+        scene: 'MenuScene',
+        data: {
+          mode: this.menuMode,
+          returnTo: this.returnTo,
+          step: this.step,
+          draftName: this.playerName,
+          draftCharacter: this.selectedCharacter,
+        } satisfies MenuSceneData,
+      },
+      returnData: this.returnTo?.data,
+    });
   }
 
   private computeLayout(w: number, h: number): MenuLayout {
@@ -329,6 +390,7 @@ export class MenuScene extends Phaser.Scene {
 
     document.body.appendChild(input);
     this.nameInput = input;
+    input.value = this.playerName;
     this.positionNameInput();
   }
 
@@ -426,8 +488,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private startGame() {
-    const name = this.playerName.trim();
-    if (!name) return;
+    const name = resolvePlayerName(this.playerName);
+    savePlayerName(name);
+    saveCharacter(this.selectedCharacter);
     this.registry.set('playerName', name);
     this.registry.set('character', this.selectedCharacter);
     this.cleanupAndLeave();
@@ -441,8 +504,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private saveNameAndReturn() {
-    const name = this.playerName.trim();
-    if (!name || !this.returnTo) return;
+    const name = resolvePlayerName(this.playerName);
+    if (!this.returnTo) return;
+    savePlayerName(name);
     this.registry.set('playerName', name);
     const data: GameOverData = { ...this.returnTo.data, playerName: name };
     this.cleanupAndLeave();
@@ -451,6 +515,7 @@ export class MenuScene extends Phaser.Scene {
 
   private confirmCharacterAndReturn() {
     if (!this.returnTo) return;
+    saveCharacter(this.selectedCharacter);
     this.registry.set('character', this.selectedCharacter);
     const data: GameOverData = { ...this.returnTo.data, character: this.selectedCharacter };
     this.cleanupAndLeave();

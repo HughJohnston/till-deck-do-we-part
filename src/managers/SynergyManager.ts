@@ -19,6 +19,15 @@ export class SynergyManager {
     return this.collectedIndex >= SYNERGY_SEQUENCE.length;
   }
 
+  get hasMoreLetters(): boolean {
+    return this.collectedIndex < SYNERGY_SEQUENCE.length;
+  }
+
+  get nextLetterKey(): string | undefined {
+    if (!this.hasMoreLetters) return undefined;
+    return `synergy-${SYNERGY_SEQUENCE[this.collectedIndex]}`;
+  }
+
   collectLetter(letterKey: string): boolean {
     const letter = letterKey.replace('synergy-', '');
     if (letter === this.nextLetterNeeded) {

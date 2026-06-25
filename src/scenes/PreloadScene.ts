@@ -72,6 +72,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.audio('sfx-grunt-female', 'assets/audio/soundFX/female grunt.mp3');
     this.load.audio('sfx-ui', 'assets/audio/soundFX/UI button press.mp3');
     this.load.audio('sfx-synergy', 'assets/audio/soundFX/synergy.mp3');
+    this.load.audio('sfx-synergy-collect', 'assets/audio/soundFX/synergy collect.mp3');
   }
 
   create() {

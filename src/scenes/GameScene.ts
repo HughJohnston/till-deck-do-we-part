@@ -13,14 +13,23 @@ import { registerUiSound } from '../ui/uiSound';
 import { registerAudioConsole } from '../ui/AudioConsole';
 import { stopMenuMusic } from '../ui/menuMusic';
 import { playMusic, stopMusic } from '../ui/musicPlayer';
-import { playSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlayer';
+import { playSfx, playJumpSfx, startRunSfx, stopRunSfx, isRunSfxPlaying } from '../ui/sfxPlayer';
 import {
   addRunSlides,
   isUnlocked,
 } from '../services/HoneymoonProgressService';
 import { submitScore } from '../services/LeaderboardService';
+import { recordRunEnd } from '../services/PlayerStatsService';
+import { resolvePlayerName } from '../services/PlayerProfileService';
+import { applyTileScroll } from '../utils/scrollVisuals';
 
 export type GameMode = 'normal' | 'honeymoon';
+
+interface StreetSegment {
+  image: Phaser.GameObjects.Image;
+  /** Left edge in street-parallax space: screenX = worldLeft - scrollDistance * streetMult */
+  worldLeft: number;
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -28,9 +37,13 @@ export class GameScene extends Phaser.Scene {
   private skyLayer!: Phaser.GameObjects.TileSprite;
   private groundLayer!: Phaser.GameObjects.TileSprite;
 
-  private streetSegments: Phaser.GameObjects.Image[] = [];
+  private streetSegments: StreetSegment[] = [];
   private nextStreetIsGap = false;
   private static readonly STREET_SCENE_KEYS = ['bg-ryelane', 'bg-wingfield', 'bg-pubs', 'bg-ryelane2'];
+  private static readonly MAX_FRAME_DELTA_MS = 33;
+
+  /** 1.0× scroll distance — backgrounds only; gameplay keeps physics velocity. */
+  private scrollDistance = 0;
 
   difficultyManager!: DifficultyManager;
   scoreManager!: ScoreManager;
@@ -46,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   private jumpKey = 'jump';
   private doubleJumpKey = 'double-jump';
   private synergyGoldTimer?: Phaser.Time.TimerEvent;
+  private runStartedAt = 0;
+  private synergyCompletionsThisRun = 0;
   private obstacleCollider?: Phaser.Physics.Arcade.Collider;
 
   private testMode = false;
@@ -104,6 +119,9 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.isGameOver = false;
     this.jumpCount = 0;
+    this.scrollDistance = 0;
+    this.runStartedAt = this.time.now;
+    this.synergyCompletionsThisRun = 0;
 
     const isHoneymoonRun = this.gameMode === 'honeymoon';
 
@@ -186,7 +204,8 @@ export class GameScene extends Phaser.Scene {
     // Spawn manager
     this.spawnManager = new SpawnManager(this, this.difficultyManager);
     if (isHoneymoonRun) this.spawnManager.setHoneymoonMode(true);
-    this.spawnManager.nextSynergyKey = () => `synergy-${this.synergyManager.nextLetterNeeded}`;
+    this.spawnManager.nextSynergyKey = () => this.synergyManager.nextLetterKey;
+    this.spawnManager.getScore = () => this.scoreManager.getDisplayScore();
 
     this.physics.add.collider(this.player, this.spawnManager.platforms, () => { this.jumpCount = 0; });
     this.obstacleCollider = this.physics.add.collider(this.player, this.spawnManager.obstacles, () => this.handleDeath());
@@ -195,9 +214,10 @@ export class GameScene extends Phaser.Scene {
       const px = sprite.x;
       const py = sprite.y;
       sprite.destroy();
-      const points = this.scoreManager.addCollectablePoints();
-      this.showScorePopup(px, py, points);
+      const { points, streak } = this.scoreManager.addCollectablePoints(this.time.now);
+      this.showScorePopup(px, py, points, streak);
       playSfx('sfx-collect');
+      this.events.emit('collect-streak', streak);
       this.events.emit('collectable-picked');
     });
     this.physics.add.overlap(this.player, this.spawnManager.synergyGroup, (_p, letter) => {
@@ -206,8 +226,10 @@ export class GameScene extends Phaser.Scene {
       const collected = this.synergyManager.collectLetter(key);
       sprite.destroy();
       if (collected) {
+        playSfx('sfx-synergy-collect');
         this.events.emit('synergy-letter', this.synergyManager.progress);
         if (this.synergyManager.isComplete) {
+          this.synergyCompletionsThisRun += 1;
           this.scoreManager.activateSynergyMultiplier();
           this.synergyManager.reset();
           this.events.emit('synergy-complete');
@@ -243,6 +265,7 @@ export class GameScene extends Phaser.Scene {
 
   private handleResize() {
     this.layoutEnvironment();
+    this.applyBackgroundFromScroll();
     if (this.testMode) this.drawTestGuides();
   }
 
@@ -277,14 +300,14 @@ export class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const scale = this.getStreetScale();
     const y = this.getStreetY();
-    let x = 0;
-    while (x < w + 1600 * scale) {
-      const seg = this.spawnStreetSegment(x, y, scale);
-      x += seg.displayWidth;
+    let worldLeft = 0;
+    while (worldLeft < w + 1600 * scale) {
+      const seg = this.spawnStreetSegment(worldLeft, y, scale);
+      worldLeft += seg.image.displayWidth;
     }
   }
 
-  private spawnStreetSegment(x: number, y: number, scale: number): Phaser.GameObjects.Image {
+  private spawnStreetSegment(worldLeft: number, y: number, scale: number): StreetSegment {
     let key: string;
     if (this.isHoneymoonRun) {
       key = 'bg-honeymoon-shore';
@@ -294,18 +317,27 @@ export class GameScene extends Phaser.Scene {
       key = Phaser.Utils.Array.GetRandom(GameScene.STREET_SCENE_KEYS);
     }
     if (!this.isHoneymoonRun) this.nextStreetIsGap = !this.nextStreetIsGap;
-    const img = this.add.image(x, y, key).setOrigin(0, 0).setScale(scale).setDepth(-2);
-    this.streetSegments.push(img);
-    return img;
+    const streetMult = ENV_LAYOUT.scroll.street;
+    const image = this.add
+      .image(worldLeft - this.scrollDistance * streetMult, y, key)
+      .setOrigin(0, 0)
+      .setScale(scale)
+      .setDepth(-2);
+    if ('setRoundPixels' in image) (image as Phaser.GameObjects.Image & { setRoundPixels(v: boolean): void }).setRoundPixels(false);
+    const segment = { image, worldLeft };
+    this.streetSegments.push(segment);
+    return segment;
   }
 
   private layoutStreetSegments() {
     const newScale = this.getStreetScale();
     const newY = this.getStreetY();
+    const streetMult = ENV_LAYOUT.scroll.street;
     for (const seg of this.streetSegments) {
-      const oldScale = seg.scaleX;
-      if (oldScale > 0) seg.x = seg.x * (newScale / oldScale);
-      seg.setScale(newScale).y = newY;
+      const oldScale = seg.image.scaleX;
+      if (oldScale > 0) seg.image.x = seg.image.x * (newScale / oldScale);
+      seg.image.setScale(newScale).y = newY;
+      seg.worldLeft = seg.image.x + this.scrollDistance * streetMult;
     }
     this.fillStreetRight();
   }
@@ -314,15 +346,46 @@ export class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const scale = this.getStreetScale();
     const y = this.getStreetY();
-    let rightEdge = 0;
+    const streetMult = ENV_LAYOUT.scroll.street;
+    const scroll = this.scrollDistance;
+    let rightScreen = 0;
     if (this.streetSegments.length > 0) {
       const last = this.streetSegments[this.streetSegments.length - 1];
-      rightEdge = last.x + last.displayWidth;
+      rightScreen = last.worldLeft - scroll * streetMult + last.image.displayWidth;
     }
-    while (rightEdge < w + 400) {
-      const seg = this.spawnStreetSegment(rightEdge, y, scale);
-      rightEdge += seg.displayWidth;
+    while (rightScreen < w + 400) {
+      const worldLeft = this.streetSegments.length > 0
+        ? this.streetSegments[this.streetSegments.length - 1].worldLeft +
+          this.streetSegments[this.streetSegments.length - 1].image.displayWidth
+        : 0;
+      const seg = this.spawnStreetSegment(worldLeft, y, scale);
+      rightScreen = seg.worldLeft - scroll * streetMult + seg.image.displayWidth;
     }
+  }
+
+  private applyBackgroundFromScroll() {
+    const scroll = this.scrollDistance;
+    applyTileScroll(this.skyLayer, scroll, ENV_LAYOUT.scroll.sky);
+    applyTileScroll(this.groundLayer, scroll, ENV_LAYOUT.scroll.ground);
+
+    const streetMult = ENV_LAYOUT.scroll.street;
+    for (const seg of this.streetSegments) {
+      seg.image.x = seg.worldLeft - scroll * streetMult;
+    }
+
+    while (this.streetSegments.length > 0) {
+      const first = this.streetSegments[0];
+      if (first.image.x + first.image.displayWidth < -50) {
+        first.image.destroy();
+        this.streetSegments.shift();
+      } else break;
+    }
+    this.fillStreetRight();
+  }
+
+  private advanceBackgroundScroll(speed: number, dt: number) {
+    this.scrollDistance += speed * dt;
+    this.applyBackgroundFromScroll();
   }
 
   private toggleTestMode() {
@@ -452,9 +515,10 @@ export class GameScene extends Phaser.Scene {
     this.applyTuning();
   }
 
-  private showScorePopup(x: number, y: number, amount: number) {
+  private showScorePopup(x: number, y: number, amount: number, streak = 1) {
     const unit = this.isHoneymoonRun ? 'sandcastles' : 'slides';
-    const popup = this.add.text(x, y, `+${amount} ${unit}`, {
+    const combo = streak >= 2 ? `\nx${streak} combo` : '';
+    const popup = this.add.text(x, y, `+${amount} ${unit}${combo}`, {
       fontSize: '22px', color: '#33dd55', fontFamily: FONT_FAMILY,
       stroke: '#0a3315', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(1000);
@@ -490,7 +554,7 @@ export class GameScene extends Phaser.Scene {
           if (!this.isOnGround()) this.player.anims.pause();
         });
       }
-      playSfx('sfx-jump');
+      playJumpSfx(this.character === 'ruth' ? 'ruth' : 'wilf');
       stopRunSfx();
     }
   }
@@ -500,35 +564,11 @@ export class GameScene extends Phaser.Scene {
     return body.touching.down || body.blocked.down;
   }
 
-  private scrollLayers(speed: number, dt: number) {
-    // tilePositionX is in texture space, so on-screen movement = delta * tileScaleX.
-    // Divide by tileScaleX so the scroll multipliers map directly to on-screen speed
-    // (otherwise layers with a larger tileScale appear to scroll faster).
-    const advance = (layer: Phaser.GameObjects.TileSprite, mult: number) => {
-      const s = layer.tileScaleX || 1;
-      layer.tilePositionX += (speed * mult * dt) / s;
-    };
-    advance(this.skyLayer, ENV_LAYOUT.scroll.sky);
-    advance(this.groundLayer, ENV_LAYOUT.scroll.ground);
-
-    // Street segments scroll as discrete images rather than a TileSprite.
-    const streetDx = speed * ENV_LAYOUT.scroll.street * dt;
-    for (const seg of this.streetSegments) seg.x -= streetDx;
-
-    // Recycle segments that have left the screen.
-    while (this.streetSegments.length > 0) {
-      const first = this.streetSegments[0];
-      if (first.x + first.displayWidth < -50) {
-        first.destroy();
-        this.streetSegments.shift();
-      } else break;
-    }
-    this.fillStreetRight();
-  }
-
   update(_time: number, delta: number) {
+    const dt = Math.min(delta, GameScene.MAX_FRAME_DELTA_MS) / 1000;
+
     if (this.testMode) {
-      this.scrollLayers(this.testScrollSpeed, delta / 1000);
+      this.advanceBackgroundScroll(this.testScrollSpeed, dt);
       return;
     }
 
@@ -541,8 +581,7 @@ export class GameScene extends Phaser.Scene {
     this.spawnManager.update(delta);
 
     const speed = this.difficultyManager.currentSpeed;
-    const dt = delta / 1000;
-    this.scrollLayers(speed, dt);
+    this.advanceBackgroundScroll(speed, dt);
 
     // Reuse a single hoisted handler (see applyScrollVelocity) instead of
     // allocating a fresh closure every frame, which keeps GC pauses (a common
@@ -608,13 +647,21 @@ export class GameScene extends Phaser.Scene {
       const score = this.scoreManager.getDisplayScore();
       const scoreLabel = this.scoreManager.scoreLabel;
       const character = this.registry.get('character') as string;
-      const playerName = this.registry.get('playerName') as string;
+      const playerName = resolvePlayerName(this.registry.get('playerName'));
 
       const wasUnlocked = isUnlocked();
       addRunSlides(score);
       const justUnlocked = !wasUnlocked && isUnlocked();
 
       submitScore({ name: playerName, score, character });
+      recordRunEnd({
+        playerName,
+        score,
+        runMs: Math.floor(this.time.now - this.runStartedAt),
+        synergyCompletions: this.synergyCompletionsThisRun,
+        isHoneymoon: this.gameMode === 'honeymoon',
+        character: this.character === 'ruth' ? 'ruth' : 'wilf',
+      });
 
       const gameOverData = {
         score, scoreLabel, character, playerName, gameMode: this.gameMode,

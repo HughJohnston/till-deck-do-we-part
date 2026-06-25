@@ -12,6 +12,17 @@ export interface LeaderboardEntry {
 }
 
 const REST_ENDPOINT = `${SUPABASE_URL}/rest/v1/scores`;
+const FETCH_TIMEOUT_MS = 8000;
+
+export interface FetchTopScoresResult {
+  entries: LeaderboardEntry[];
+  failed: boolean;
+}
+
+// Soft reset: rows before this instant (UTC) stay in Supabase but are not shown.
+// Default = 25 Jun 2026 00:00 UK (BST) = 24 Jun 23:00 UTC
+const LEADERBOARD_RESET_AFTER =
+  import.meta.env.VITE_LEADERBOARD_RESET_AFTER ?? '2026-06-24T23:00:00Z';
 
 function authHeaders(): Record<string, string> {
   // The new-style publishable key is passed as both the apikey header and the
@@ -30,7 +41,7 @@ export async function submitScore(entry: LeaderboardEntry): Promise<void> {
   if (!name || !Number.isFinite(entry.score)) return;
 
   try {
-    await fetch(REST_ENDPOINT, {
+    const res = await fetch(REST_ENDPOINT, {
       method: 'POST',
       headers: {
         ...authHeaders(),
@@ -43,27 +54,39 @@ export async function submitScore(entry: LeaderboardEntry): Promise<void> {
         character: entry.character ?? null,
       }),
     });
+    if (!res.ok) {
+      console.warn('[leaderboard] submitScore HTTP', res.status);
+    }
   } catch (err) {
     console.warn('[leaderboard] submitScore failed', err);
   }
 }
 
-export async function fetchTopScores(limit = 100): Promise<LeaderboardEntry[]> {
-  if (!leaderboardEnabled) return [];
+export async function fetchTopScores(limit = 100): Promise<FetchTopScoresResult> {
+  if (!leaderboardEnabled) return { entries: [], failed: false };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const url = `${REST_ENDPOINT}?select=name,score,character&order=score.desc,created_at.asc&limit=${limit}`;
-    const res = await fetch(url, { headers: authHeaders() });
+    const cutoff = encodeURIComponent(LEADERBOARD_RESET_AFTER);
+    const url =
+      `${REST_ENDPOINT}?select=name,score,character` +
+      `&created_at=gte.${cutoff}` +
+      `&order=score.desc,created_at.asc&limit=${limit}`;
+    const res = await fetch(url, { headers: authHeaders(), signal: controller.signal });
     if (!res.ok) {
       console.warn('[leaderboard] fetchTopScores HTTP', res.status);
-      return [];
+      return { entries: [], failed: true };
     }
     const rows = (await res.json()) as LeaderboardEntry[];
-    if (!Array.isArray(rows)) return [];
-    return dedupeDisplayRows(rows);
+    if (!Array.isArray(rows)) return { entries: [], failed: true };
+    return { entries: dedupeDisplayRows(rows), failed: false };
   } catch (err) {
     console.warn('[leaderboard] fetchTopScores failed', err);
-    return [];
+    return { entries: [], failed: true };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -71,7 +94,7 @@ export async function fetchPlayerRank(playerName: string): Promise<number | null
   const name = playerName.trim();
   if (!name || !leaderboardEnabled) return null;
 
-  const entries = await fetchTopScores();
+  const { entries } = await fetchTopScores();
   const key = name.toLowerCase();
   const index = entries.findIndex((entry) => (entry.name ?? '').trim().toLowerCase() === key);
   return index >= 0 ? index + 1 : null;

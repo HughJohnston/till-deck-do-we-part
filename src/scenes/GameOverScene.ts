@@ -156,7 +156,7 @@ export class GameOverScene extends Phaser.Scene {
     createButton(this, {
       x: cx, y: circleBackY, width: btnW, height: btnH,
       label: 'CIRCLE BACK', variant: 'primary', fontSize: fontBtn,
-      onClick: () => this.scene.start('GameScene'),
+      onClick: () => this.scene.start('GameScene', { gameMode: 'normal' }),
     });
 
     const lbButton = createButton(this, {

@@ -135,4 +135,5 @@ export const comicImages: ImageDef[] = [
   { key: 'comic-4', path: 'assets/ui/Comic/4_productivity.png', width: 500, height: 500 },
   { key: 'comic-5', path: 'assets/ui/Comic/5_distractions.png', width: 500, height: 500 },
   { key: 'comic-6', path: 'assets/ui/Comic/6_honeymoon.png', width: 500, height: 500 },
+  { key: 'comic-7', path: 'assets/ui/Comic/7_synergy.png', width: 500, height: 500 },
 ];

@@ -1,10 +1,17 @@
 import { difficultyConfig } from '../config/difficultyConfig';
 
+export interface CollectResult {
+  points: number;
+  streak: number;
+}
+
 export class ScoreManager {
   score = 0;
   multiplier = 1;
   private multiplierTimer = 0;
   private isHoneymoonRun: boolean;
+  collectStreak = 0;
+  private lastCollectAt = 0;
 
   constructor(isHoneymoonRun = false) {
     this.isHoneymoonRun = isHoneymoonRun;
@@ -29,10 +36,20 @@ export class ScoreManager {
     }
   }
 
-  addCollectablePoints(): number {
-    const points = difficultyConfig.collectablePoints * this.multiplier;
+  addCollectablePoints(nowMs: number): CollectResult {
+    if (this.lastCollectAt > 0 && nowMs - this.lastCollectAt > difficultyConfig.collectStreakWindowMs) {
+      this.collectStreak = 0;
+    }
+    this.collectStreak += 1;
+    this.lastCollectAt = nowMs;
+
+    const streakBonus = Math.min(
+      1 + (this.collectStreak - 1) * difficultyConfig.collectStreakBonusPerStep,
+      difficultyConfig.collectStreakBonusCap,
+    );
+    const points = Math.round(difficultyConfig.collectablePoints * this.multiplier * streakBonus);
     this.score += points;
-    return points;
+    return { points, streak: this.collectStreak };
   }
 
   activateSynergyMultiplier() {
@@ -48,5 +65,7 @@ export class ScoreManager {
     this.score = 0;
     this.multiplier = 1;
     this.multiplierTimer = 0;
+    this.collectStreak = 0;
+    this.lastCollectAt = 0;
   }
 }

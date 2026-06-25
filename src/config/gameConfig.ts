@@ -9,11 +9,10 @@ import { GameOverScene } from '../scenes/GameOverScene';
 import { LeaderboardScene } from '../scenes/LeaderboardScene';
 import { HoneymoonInterstitialScene } from '../scenes/HoneymoonInterstitialScene';
 import { AudioConsoleScene } from '../ui/AudioConsole';
+import { GAME_VERSION } from './version';
 
+export { GAME_VERSION };
 export const FONT_FAMILY = 'Minecraft, monospace';
-
-// Bump this on each deploy so the build can be identified on-device.
-export const GAME_VERSION = 'v0.7.3';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,

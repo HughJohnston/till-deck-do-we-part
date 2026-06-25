@@ -3,7 +3,7 @@
 // These are read from Vite env vars (see .env / .env.example) and are baked into
 // the client bundle at build time. That is expected and safe: the publishable
 // key only grants the access allowed by the Row Level Security policies on the
-// `scores` table (anonymous read + guarded insert).
+// `scores` and `player_stats` tables.
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY ?? '';

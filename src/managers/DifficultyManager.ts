@@ -36,6 +36,11 @@ export class DifficultyManager {
     return lerp(difficultyConfig.platformSpawnMax, difficultyConfig.platformSpawnMin, this.getProgressFraction());
   }
 
+  /** 0 at run start → 1 at max speed; drives hazard variety ramps. */
+  get progressFraction(): number {
+    return this.getProgressFraction();
+  }
+
   private getProgressFraction(): number {
     return (this.currentSpeed - difficultyConfig.initialSpeed) /
       (difficultyConfig.maxSpeed - difficultyConfig.initialSpeed);

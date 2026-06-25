@@ -6,3 +6,5 @@ dist/
 .env.*
 !.env.example
 *~lock~
+.vercel
+.env*

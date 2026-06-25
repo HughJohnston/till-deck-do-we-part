@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
+import { isTouchDevice } from '../utils/device';
 
-const AUDIO_DEFAULTS: { key: string; volume: number }[] = [
+const AUDIO_DEFAULTS: { key: string; volume: number; mobileVolume?: number }[] = [
   { key: 'bgm', volume: 0.45 },
-  { key: 'menu-bgm', volume: 0.03 },
+  { key: 'menu-bgm', volume: 0.03, mobileVolume: 0.01 },
   { key: 'honeymoon-bgm', volume: 0.30 },
   { key: 'sfx-jump', volume: 0.40 },
   { key: 'sfx-run', volume: 0.82 },
   { key: 'sfx-collect', volume: 0.70 },
   { key: 'sfx-grunt-male', volume: 0.85 },
   { key: 'sfx-grunt-female', volume: 0.75 },
-  { key: 'sfx-ui', volume: 0.60 },
+  { key: 'sfx-ui', volume: 0.35, mobileVolume: 0.45 },
   { key: 'sfx-synergy', volume: 0.85 },
+  { key: 'sfx-synergy-collect', volume: 0.70 },
 ];
 
 const PANEL_BG = 0x111122;
@@ -38,7 +40,11 @@ let consoleScene: AudioConsoleScene | null = null;
 
 export function getAudioVolume(key: string): number {
   const entry = AUDIO_DEFAULTS.find((a) => a.key === key);
-  return entry ? entry.volume : 0.5;
+  if (!entry) return 0.5;
+  if (isTouchDevice() && entry.mobileVolume !== undefined) {
+    return entry.mobileVolume;
+  }
+  return entry.volume;
 }
 
 export class AudioConsoleScene extends Phaser.Scene {

@@ -6,13 +6,22 @@ import { registerAudioConsole } from '../ui/AudioConsole';
 import { UiButton, createButton } from '../ui/Button';
 import { fetchTopScores, LeaderboardEntry } from '../services/LeaderboardService';
 import type { GameOverData } from './GameOverScene';
+import { resolvePlayerName } from '../services/PlayerProfileService';
 
 const GOLD = '#FFD700';
+const GREEN = '#44dd66';
+
+export interface LeaderboardSceneData {
+  returnData?: GameOverData;
+  returnTo?: { scene: string; data?: unknown };
+}
 
 export class LeaderboardScene extends Phaser.Scene {
   private returnData?: GameOverData;
+  private returnTo?: { scene: string; data?: unknown };
   private entries: LeaderboardEntry[] = [];
   private loaded = false;
+  private loadFailed = false;
 
   private bg!: Phaser.GameObjects.Image;
   private title!: Phaser.GameObjects.Text;
@@ -37,8 +46,25 @@ export class LeaderboardScene extends Phaser.Scene {
   private dragging = false;
   private dragStartPointerY = 0;
   private dragStartScroll = 0;
+  private buildingList = false;
 
   private resizeHandler?: (size: Phaser.Structs.Size) => void;
+  private onWheel = (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+    this.applyScroll(this.scrollY + dy);
+  };
+  private onPointerDown = (pointer: Phaser.Input.Pointer) => {
+    if (this.isInView(pointer.y)) {
+      this.dragging = true;
+      this.dragStartPointerY = pointer.y;
+      this.dragStartScroll = this.scrollY;
+    }
+  };
+  private onPointerMove = (pointer: Phaser.Input.Pointer) => {
+    if (this.dragging && pointer.isDown) {
+      this.applyScroll(this.dragStartScroll - (pointer.y - this.dragStartPointerY));
+    }
+  };
+  private endDrag = () => { this.dragging = false; };
 
   constructor() {
     super('LeaderboardScene');
@@ -46,10 +72,21 @@ export class LeaderboardScene extends Phaser.Scene {
 
   private fetchGeneration = 0;
 
-  init(data: GameOverData) {
-    this.returnData = data;
+  init(data?: LeaderboardSceneData | GameOverData) {
+    if (data && 'returnTo' in data) {
+      const sceneData = data as LeaderboardSceneData;
+      this.returnTo = sceneData.returnTo;
+      this.returnData = sceneData.returnData;
+    } else if (data && 'score' in data) {
+      this.returnData = data as GameOverData;
+      this.returnTo = undefined;
+    } else {
+      this.returnData = undefined;
+      this.returnTo = undefined;
+    }
     this.entries = [];
     this.loaded = false;
+    this.loadFailed = false;
     this.scrollY = 0;
   }
 
@@ -80,7 +117,11 @@ export class LeaderboardScene extends Phaser.Scene {
     this.backButton = createButton(this, {
       x: cx, y: h * 0.92, width: btnW, height: btnH,
       label: '← Back', variant: 'secondary', fontSize: fontBtn,
-      onClick: () => this.scene.start('GameOverScene', this.returnData),
+      onClick: () => {
+        if (this.returnTo) this.scene.start(this.returnTo.scene, this.returnTo.data as object);
+        else if (this.returnData) this.scene.start('GameOverScene', this.returnData);
+        else this.scene.start('MenuScene');
+      },
     });
 
     this.setupScrollInput();
@@ -92,42 +133,36 @@ export class LeaderboardScene extends Phaser.Scene {
 
     this.resizeHandler = () => this.relayout();
     this.scale.on('resize', this.resizeHandler);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      if (this.resizeHandler) this.scale.off('resize', this.resizeHandler);
-      this.maskRect?.destroy();
-    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
     this.fetchGeneration++;
     const generation = this.fetchGeneration;
 
-    fetchTopScores(100).then((rows) => {
+    fetchTopScores(100).then(({ entries, failed }) => {
       if (!this.scene.isActive() || generation !== this.fetchGeneration) return;
-      this.entries = rows;
+      this.entries = entries;
+      this.loadFailed = failed;
       this.loaded = true;
       this.relayout();
     });
   }
 
-  private setupScrollInput() {
-    this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      this.applyScroll(this.scrollY + dy);
-    });
+  private cleanup() {
+    if (this.resizeHandler) this.scale.off('resize', this.resizeHandler);
+    this.input.off('wheel', this.onWheel);
+    this.input.off('pointerdown', this.onPointerDown);
+    this.input.off('pointermove', this.onPointerMove);
+    this.input.off('pointerup', this.endDrag);
+    this.input.off('pointerupoutside', this.endDrag);
+    this.maskRect?.destroy();
+  }
 
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (this.isInView(pointer.y)) {
-        this.dragging = true;
-        this.dragStartPointerY = pointer.y;
-        this.dragStartScroll = this.scrollY;
-      }
-    });
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.dragging && pointer.isDown) {
-        this.applyScroll(this.dragStartScroll - (pointer.y - this.dragStartPointerY));
-      }
-    });
-    const endDrag = () => { this.dragging = false; };
-    this.input.on('pointerup', endDrag);
-    this.input.on('pointerupoutside', endDrag);
+  private setupScrollInput() {
+    this.input.on('wheel', this.onWheel);
+    this.input.on('pointerdown', this.onPointerDown);
+    this.input.on('pointermove', this.onPointerMove);
+    this.input.on('pointerup', this.endDrag);
+    this.input.on('pointerupoutside', this.endDrag);
   }
 
   private isInView(y: number): boolean {
@@ -140,7 +175,9 @@ export class LeaderboardScene extends Phaser.Scene {
   }
 
   private getPlayerName(): string {
-    return (this.returnData?.playerName ?? (this.registry.get('playerName') as string) ?? '').trim();
+    return resolvePlayerName(
+      this.returnData?.playerName ?? this.registry.get('playerName'),
+    );
   }
 
   private relayout() {
@@ -186,108 +223,128 @@ export class LeaderboardScene extends Phaser.Scene {
   }
 
   private buildList() {
-    if (this.viewportContainer) {
-      if (this.listMaskFilter) {
-        this.viewportContainer.filters?.internal?.remove(this.listMaskFilter);
-        this.listMaskFilter = undefined;
+    if (this.buildingList) return;
+    this.buildingList = true;
+
+    try {
+      if (this.viewportContainer) {
+        if (this.listMaskFilter) {
+          this.viewportContainer.filters?.internal?.remove(this.listMaskFilter);
+          this.listMaskFilter = undefined;
+        }
+        this.viewportContainer.removeAll(true);
+        this.viewportContainer.destroy();
       }
-      this.viewportContainer.removeAll(true);
-      this.viewportContainer.destroy();
-    }
-    this.viewportContainer = undefined;
-    this.listContainer = undefined;
+      this.viewportContainer = undefined;
+      this.listContainer = undefined;
 
-    if (!this.loaded) {
-      this.statusText.setText('Loading...').setVisible(true)
-        .setPosition(this.scale.width / 2, this.viewTop + this.viewHeight / 2);
-      return;
-    }
+      if (!this.loaded) {
+        this.statusText.setText('Loading...').setVisible(true)
+          .setPosition(this.scale.width / 2, this.viewTop + this.viewHeight / 2);
+        return;
+      }
 
-    if (this.entries.length === 0) {
-      this.statusText.setText('No scores yet —\nbe the first!')
-        .setAlign('center').setVisible(true)
-        .setPosition(this.scale.width / 2, this.viewTop + this.viewHeight / 2);
-      return;
-    }
+      if (this.loadFailed) {
+        this.statusText.setText("Couldn't load scores")
+          .setAlign('center').setVisible(true)
+          .setPosition(this.scale.width / 2, this.viewTop + this.viewHeight / 2);
+        return;
+      }
 
-    this.statusText.setVisible(false);
+      if (this.entries.length === 0) {
+        this.statusText.setText('No scores yet —\nbe the first!')
+          .setAlign('center').setVisible(true)
+          .setPosition(this.scale.width / 2, this.viewTop + this.viewHeight / 2);
+        return;
+      }
 
-    const base = Math.min(this.scale.width, this.scale.height);
-    const fontSize = Phaser.Math.Clamp(Math.round(base * 0.035), 13, 20);
-    const pad = Math.max(10, this.listWidth * 0.04);
-    const rankX = pad;
-    const nameX = pad + this.listWidth * 0.16;
-    const scoreX = this.listWidth - pad;
-    const playerName = this.getPlayerName();
+      this.statusText.setVisible(false);
 
-    const viewport = this.add.container(this.listLeft, this.viewTop).setDepth(6);
-    const list = this.add.container(0, 0);
-    viewport.add(list);
+      const base = Math.min(this.scale.width, this.scale.height);
+      const fontSize = Phaser.Math.Clamp(Math.round(base * 0.035), 13, 20);
+      const pad = Math.max(10, this.listWidth * 0.04);
+      const rankX = pad;
+      const nameX = pad + this.listWidth * 0.16;
+      const scoreX = this.listWidth - pad;
+      const playerName = this.getPlayerName();
 
-    this.entries.forEach((entry, i) => {
-      const rowY = i * this.rowHeight + this.rowHeight / 2;
-      const isTop = i === 0;
-      const isSelf = playerName.length > 0 && (entry.name ?? '').trim() === playerName;
+      const viewport = this.add.container(this.listLeft, this.viewTop).setDepth(6);
+      const list = this.add.container(0, 0);
+      viewport.add(list);
 
-      if (i % 2 === 1) {
-        const stripe = this.add.rectangle(
-          this.listWidth / 2, rowY,
-          this.listWidth, this.rowHeight, 0xffffff, 0.05,
+      this.entries.forEach((entry, i) => {
+        const rowY = i * this.rowHeight + this.rowHeight / 2;
+        const isTop = i === 0;
+        const isSelf = playerName.length > 0 && (entry.name ?? '').trim() === playerName;
+
+        if (i % 2 === 1) {
+          const stripe = this.add.rectangle(
+            this.listWidth / 2, rowY,
+            this.listWidth, this.rowHeight, 0xffffff, 0.05,
+          );
+          list.add(stripe);
+        }
+
+        const rankText = this.add.text(rankX, rowY, `${i + 1}`, {
+          fontSize: `${fontSize}px`, color: isTop ? GOLD : '#aaaacc', fontFamily: FONT_FAMILY,
+        }).setOrigin(0, 0.5);
+        list.add(rankText);
+
+        let labelX = nameX;
+        if (isTop && this.textures.exists('ui-trophy')) {
+          const trophy = this.add.image(nameX, rowY, 'ui-trophy').setOrigin(0, 0.5);
+          trophy.setScale((this.rowHeight * 0.7) / trophy.height);
+          list.add(trophy);
+          labelX = nameX + trophy.displayWidth + 8;
+        }
+
+        const rawName = entry.name ?? '???';
+        const displayName = isSelf ? `★ ${rawName}` : rawName;
+        const nameText = this.add.text(labelX, rowY, displayName, {
+          fontSize: `${fontSize}px`,
+          color: isTop ? GOLD : isSelf ? GOLD : '#ffffff',
+          fontFamily: FONT_FAMILY,
+          fontStyle: isTop || isSelf ? 'bold' : 'normal',
+        }).setOrigin(0, 0.5);
+        const maxNameWidth = scoreX - labelX - this.listWidth * 0.18;
+        if (nameText.width > maxNameWidth) nameText.setText(this.truncate(displayName, maxNameWidth, fontSize));
+        list.add(nameText);
+
+        const scoreText = this.add.text(scoreX, rowY, `${Math.floor(entry.score)}`, {
+          fontSize: `${fontSize}px`,
+          color: isTop ? GOLD : isSelf ? GREEN : '#ffffff',
+          fontFamily: FONT_FAMILY,
+          fontStyle: 'bold',
+        }).setOrigin(1, 0.5);
+        list.add(scoreText);
+      });
+
+      this.updateMaskBounds();
+      try {
+        viewport.enableFilters();
+        this.listMaskFilter = viewport.filters?.internal?.addMask(
+          this.maskRect!,
+          false,
+          this.cameras.main,
+          'world',
         );
-        list.add(stripe);
+      } catch (err) {
+        console.warn('[LeaderboardScene] mask filter unavailable', err);
       }
 
-      const rankText = this.add.text(rankX, rowY, `${i + 1}`, {
-        fontSize: `${fontSize}px`, color: isTop ? GOLD : '#aaaacc', fontFamily: FONT_FAMILY,
-      }).setOrigin(0, 0.5);
-      list.add(rankText);
+      this.viewportContainer = viewport;
+      this.listContainer = list;
 
-      let labelX = nameX;
-      if (isTop && this.textures.exists('ui-trophy')) {
-        const trophy = this.add.image(nameX, rowY, 'ui-trophy').setOrigin(0, 0.5);
-        trophy.setScale((this.rowHeight * 0.7) / trophy.height);
-        list.add(trophy);
-        labelX = nameX + trophy.displayWidth + 8;
-      }
+      const contentHeight = this.entries.length * this.rowHeight;
+      this.maxScroll = Math.max(0, contentHeight - this.viewHeight);
+      this.applyScroll(Phaser.Math.Clamp(this.scrollY, 0, this.maxScroll));
 
-      const rawName = entry.name ?? '???';
-      const displayName = isSelf ? `★ ${rawName}` : rawName;
-      const nameText = this.add.text(labelX, rowY, displayName, {
-        fontSize: `${fontSize}px`,
-        color: isTop ? GOLD : isSelf ? GOLD : '#ffffff',
-        fontFamily: FONT_FAMILY,
-        fontStyle: isTop || isSelf ? 'bold' : 'normal',
-      }).setOrigin(0, 0.5);
-      const maxNameWidth = scoreX - labelX - this.listWidth * 0.18;
-      if (nameText.width > maxNameWidth) nameText.setText(this.truncate(displayName, maxNameWidth, fontSize));
-      list.add(nameText);
-
-      const scoreText = this.add.text(scoreX, rowY, `${Math.floor(entry.score)}`, {
-        fontSize: `${fontSize}px`, color: isTop ? GOLD : isSelf ? GOLD : '#ffffff', fontFamily: FONT_FAMILY,
-        fontStyle: 'bold',
-      }).setOrigin(1, 0.5);
-      list.add(scoreText);
-    });
-
-    this.updateMaskBounds();
-    viewport.enableFilters();
-    this.listMaskFilter = viewport.filters!.internal.addMask(
-      this.maskRect!,
-      false,
-      this.cameras.main,
-      'world',
-    );
-
-    this.viewportContainer = viewport;
-    this.listContainer = list;
-
-    const contentHeight = this.entries.length * this.rowHeight;
-    this.maxScroll = Math.max(0, contentHeight - this.viewHeight);
-    this.applyScroll(Phaser.Math.Clamp(this.scrollY, 0, this.maxScroll));
-
-    this.panel.setDepth(5);
-    this.backButton.rect.setDepth(20);
-    this.backButton.text.setDepth(20);
+      this.panel.setDepth(5);
+      this.backButton.rect.setDepth(20);
+      this.backButton.text.setDepth(20);
+    } finally {
+      this.buildingList = false;
+    }
   }
 
   private truncate(text: string, maxWidth: number, fontSize: number): string {
