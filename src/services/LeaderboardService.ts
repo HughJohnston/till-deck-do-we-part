@@ -20,9 +20,9 @@ export interface FetchTopScoresResult {
 }
 
 // Soft reset: rows before this instant (UTC) stay in Supabase but are not shown.
-// Default = 25 Jun 2026 00:00 UK (BST) = 24 Jun 23:00 UTC
+// Default = 26 Jun 2026 00:00 UK (BST) = 25 Jun 23:00 UTC
 const LEADERBOARD_RESET_AFTER =
-  import.meta.env.VITE_LEADERBOARD_RESET_AFTER ?? '2026-06-24T23:00:00Z';
+  import.meta.env.VITE_LEADERBOARD_RESET_AFTER ?? '2026-06-25T23:00:00Z';
 
 function authHeaders(): Record<string, string> {
   // The new-style publishable key is passed as both the apikey header and the

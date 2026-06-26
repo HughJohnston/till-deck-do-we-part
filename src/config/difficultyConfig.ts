@@ -11,7 +11,9 @@ export const difficultyConfig = {
   /** Extra ms before the opening collect + obstacle (first two assets). */
   patternOpeningDelayMs: 1000,
   /** Display score below this skips multi-obstacle / high-tier patterns. */
-  earlyGameScoreThreshold: 500,
+  earlyGameScoreThreshold: 1000,
+  /** Extra breather distance multiplier while score is below earlyGameScoreThreshold. */
+  earlyBreatherGapMultiplier: 1.3,
   /** Breather gap (px) while score is still in the early band. */
   patternBreatherEarlyMin: 320,
   patternBreatherEarlyMax: 480,

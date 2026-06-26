@@ -14,6 +14,9 @@ import { GAME_VERSION } from './version';
 export { GAME_VERSION };
 export const FONT_FAMILY = 'Minecraft, monospace';
 
+/** Min ms between HUD score text re-rasterizations (see HudScene). */
+export const HUD_SCORE_REFRESH_MS = 80;
+
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   scale: {

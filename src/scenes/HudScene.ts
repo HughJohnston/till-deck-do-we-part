@@ -1,12 +1,7 @@
 import Phaser from 'phaser';
-import { FONT_FAMILY } from '../config/gameConfig';
+import { FONT_FAMILY, HUD_SCORE_REFRESH_MS } from '../config/gameConfig';
 import { GameScene } from './GameScene';
 import { isTouchDevice } from '../utils/device';
-
-// The score climbs every frame, but re-rasterizing the Text to a GPU texture
-// 60x/sec is a real per-frame cost on mobile. Refreshing ~12x/sec is visually
-// indistinguishable for a counter and removes that work from most frames.
-const SCORE_REFRESH_MS = 80;
 
 function getPersonalBest(): number {
   try { return parseInt(localStorage.getItem('tilldeck_topscore') || '0', 10); } catch { return 0; }
@@ -24,6 +19,7 @@ export class HudScene extends Phaser.Scene {
   private personalBest = 0;
   private currentSynergyProgress = 0;
   private wasMultiplierActive = false;
+  private showingPersonalBest = false;
   private synergyGlowTween?: Phaser.Tweens.Tween;
 
   constructor() {
@@ -38,6 +34,7 @@ export class HudScene extends Phaser.Scene {
     this.synergyLetters = [];
     this.currentSynergyProgress = 0;
     this.wasMultiplierActive = false;
+    this.showingPersonalBest = false;
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -79,22 +76,26 @@ export class HudScene extends Phaser.Scene {
 
     this.gameScene.events.on('score-update', (score: number, label: string, multiplier: number) => {
       const str = `${label}: ${score}`;
-      if (str !== this.lastScoreStr && this.time.now - this.lastScoreAt >= SCORE_REFRESH_MS) {
+      if (str !== this.lastScoreStr && this.time.now - this.lastScoreAt >= HUD_SCORE_REFRESH_MS) {
         this.lastScoreStr = str;
         this.lastScoreAt = this.time.now;
         this.scoreText.setText(str);
         this.scoreText.setX(this.scale.width / 2);
       }
-      if (score > this.personalBest) {
-        this.bestText.setText('NEW PB!');
-        this.bestText.setColor('#FFD700');
-      } else {
-        this.bestText.setText(`Your best: ${this.personalBest}`);
-        this.bestText.setColor('#ddddf0');
+
+      const isNewPb = score > this.personalBest;
+      if (isNewPb !== this.showingPersonalBest) {
+        this.showingPersonalBest = isNewPb;
+        if (isNewPb) {
+          this.bestText.setText('NEW PB!');
+          this.bestText.setColor('#FFD700');
+        } else {
+          this.bestText.setText(`Your best: ${this.personalBest}`);
+          this.bestText.setColor('#ddddf0');
+        }
+        this.bestText.setX(this.scale.width / 2);
       }
-      this.bestText.setX(this.scale.width / 2);
-      // setText is a no-op when the value is unchanged, so the (usually empty)
-      // multiplier text costs nothing on the vast majority of frames.
+
       const multiplierActive = multiplier > 1;
       this.multiplierText.setText(multiplierActive ? `${multiplier}x SYNERGY!` : '');
 
@@ -104,8 +105,6 @@ export class HudScene extends Phaser.Scene {
       } else if (!multiplierActive && this.wasMultiplierActive) {
         this.stopSynergyGlow();
         this.applySynergyDisplay(this.currentSynergyProgress, false);
-      } else if (multiplierActive) {
-        this.applySynergyDisplay(this.currentSynergyProgress, true);
       }
       this.wasMultiplierActive = multiplierActive;
     });
@@ -160,6 +159,8 @@ export class HudScene extends Phaser.Scene {
       letter.setScale(1);
       letter.setAlpha(1);
     }
+    // Animated alpha/scale on stroked Text every frame is costly on mobile GPUs.
+    if (isTouchDevice()) return;
     this.synergyGlowTween = this.tweens.add({
       targets: this.synergyLetters,
       alpha: { from: 0.75, to: 1 },

@@ -112,11 +112,9 @@ export class SpawnManager {
     this.patternState = 'breather';
     const progress = this.difficultyManager.progressFraction;
     const score = this.getScore?.() ?? 0;
-    const earlyBlend = Phaser.Math.Clamp(
-      score / difficultyConfig.earlyGameScoreThreshold,
-      0,
-      1,
-    );
+    const threshold = difficultyConfig.earlyGameScoreThreshold;
+    const inEarlyBand = score < threshold;
+    const earlyBlend = inEarlyBand ? 0 : 1;
     const normalMin = Phaser.Math.Linear(
       difficultyConfig.patternBreatherMin,
       difficultyConfig.patternBreatherLateMin,
@@ -127,8 +125,13 @@ export class SpawnManager {
       difficultyConfig.patternBreatherLateMax,
       progress,
     );
-    const min = Phaser.Math.Linear(difficultyConfig.patternBreatherEarlyMin, normalMin, earlyBlend);
-    const max = Phaser.Math.Linear(difficultyConfig.patternBreatherEarlyMax, normalMax, earlyBlend);
+    let min = Phaser.Math.Linear(difficultyConfig.patternBreatherEarlyMin, normalMin, earlyBlend);
+    let max = Phaser.Math.Linear(difficultyConfig.patternBreatherEarlyMax, normalMax, earlyBlend);
+    if (inEarlyBand) {
+      const gapMult = difficultyConfig.earlyBreatherGapMultiplier;
+      min *= gapMult;
+      max *= gapMult;
+    }
     this.phaseLength = Phaser.Math.Between(min, max);
   }
 

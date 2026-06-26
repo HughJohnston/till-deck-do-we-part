@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getGroundY, getGroundHeight, getPlayerX, JUMP_VELOCITY, PLAYER_SIZE } from '../utils/constants';
 import { wilfAnimFrames, ruthAnimFrames, CharacterAnimFrames } from '../config/assetManifest';
-import { FONT_FAMILY } from '../config/gameConfig';
+import { FONT_FAMILY, HUD_SCORE_REFRESH_MS } from '../config/gameConfig';
 import { ENV_LAYOUT, BG_TEXTURE_HEIGHTS } from '../config/dimensions';
 import { difficultyConfig } from '../config/difficultyConfig';
 import { DifficultyManager } from '../managers/DifficultyManager';
@@ -61,6 +61,9 @@ export class GameScene extends Phaser.Scene {
   private synergyGoldTimer?: Phaser.Time.TimerEvent;
   private runStartedAt = 0;
   private synergyCompletionsThisRun = 0;
+  private lastHudScoreEmitAt = 0;
+  private lastHudEmittedScore = -1;
+  private lastHudEmittedMultiplier = 1;
   private obstacleCollider?: Phaser.Physics.Arcade.Collider;
 
   private testMode = false;
@@ -122,6 +125,9 @@ export class GameScene extends Phaser.Scene {
     this.scrollDistance = 0;
     this.runStartedAt = this.time.now;
     this.synergyCompletionsThisRun = 0;
+    this.lastHudScoreEmitAt = 0;
+    this.lastHudEmittedScore = -1;
+    this.lastHudEmittedMultiplier = 1;
 
     const isHoneymoonRun = this.gameMode === 'honeymoon';
 
@@ -607,7 +613,22 @@ export class GameScene extends Phaser.Scene {
     if (onGround && !isRunSfxPlaying()) startRunSfx();
     else if (!onGround && isRunSfxPlaying()) stopRunSfx();
 
-    this.events.emit('score-update', this.scoreManager.getDisplayScore(), this.scoreManager.scoreLabel, this.scoreManager.multiplier);
+    this.emitThrottledScoreUpdate();
+  }
+
+  private emitThrottledScoreUpdate() {
+    const score = this.scoreManager.getDisplayScore();
+    const multiplier = this.scoreManager.multiplier;
+    const multiplierChanged = multiplier !== this.lastHudEmittedMultiplier;
+    const scoreChanged = score !== this.lastHudEmittedScore;
+    const refreshDue = this.time.now - this.lastHudScoreEmitAt >= HUD_SCORE_REFRESH_MS;
+
+    if (!multiplierChanged && !(scoreChanged && refreshDue)) return;
+
+    this.lastHudScoreEmitAt = this.time.now;
+    this.lastHudEmittedScore = score;
+    this.lastHudEmittedMultiplier = multiplier;
+    this.events.emit('score-update', score, this.scoreManager.scoreLabel, multiplier);
   }
 
   private handleDeath() {

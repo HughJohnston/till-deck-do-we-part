@@ -162,7 +162,7 @@ export class GameOverScene extends Phaser.Scene {
     const lbButton = createButton(this, {
       x: cx, y: leaderboardY, width: btnW, height: btnH,
       label: 'LEADERBOARD', variant: 'secondary', fontSize: fontBtn,
-      onClick: () => this.scene.start('LeaderboardScene', gameOverData),
+      onClick: () => this.openLeaderboard(),
     });
 
     createButton(this, {
@@ -218,6 +218,15 @@ export class GameOverScene extends Phaser.Scene {
       if (generation !== this.rankFetchGeneration || !this.rankText?.active) return;
       this.rankText.setText(rank != null ? `Rank #${rank}` : 'Rank —');
       this.layoutStatsRow();
+    });
+  }
+
+  private openLeaderboard() {
+    this.scene.stop('HudScene');
+    this.scene.stop('GameScene');
+    this.scene.start('LeaderboardScene', {
+      returnTo: { scene: 'GameOverScene', data: this.gameOverData },
+      returnData: this.gameOverData,
     });
   }
 

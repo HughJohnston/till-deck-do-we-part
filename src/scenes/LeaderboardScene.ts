@@ -47,6 +47,7 @@ export class LeaderboardScene extends Phaser.Scene {
   private dragStartPointerY = 0;
   private dragStartScroll = 0;
   private buildingList = false;
+  private pendingRelayout = false;
 
   private resizeHandler?: (size: Phaser.Structs.Size) => void;
   private onWheel = (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
@@ -88,6 +89,12 @@ export class LeaderboardScene extends Phaser.Scene {
     this.loaded = false;
     this.loadFailed = false;
     this.scrollY = 0;
+    this.buildingList = false;
+    this.pendingRelayout = false;
+    this.maskRect = undefined;
+    this.viewportContainer = undefined;
+    this.listContainer = undefined;
+    this.listMaskFilter = undefined;
   }
 
   create() {
@@ -155,6 +162,7 @@ export class LeaderboardScene extends Phaser.Scene {
     this.input.off('pointerup', this.endDrag);
     this.input.off('pointerupoutside', this.endDrag);
     this.maskRect?.destroy();
+    this.maskRect = undefined;
   }
 
   private setupScrollInput() {
@@ -208,22 +216,31 @@ export class LeaderboardScene extends Phaser.Scene {
     this.panel.setPosition(cx, this.viewTop + this.viewHeight / 2)
       .setSize(this.listWidth, this.viewHeight);
 
-    this.maskRect = this.maskRect ?? this.add.rectangle(0, 0, 1, 1, 0xffffff).setVisible(false);
+    this.ensureMaskRect();
     this.updateMaskBounds();
     this.buildList();
   }
 
+  private ensureMaskRect() {
+    if (!this.maskRect?.active) {
+      this.maskRect = this.add.rectangle(0, 0, 1, 1, 0xffffff).setVisible(false);
+    }
+  }
+
   private updateMaskBounds() {
-    if (!this.maskRect) return;
-    this.maskRect.setPosition(
+    this.ensureMaskRect();
+    this.maskRect!.setPosition(
       this.listLeft + this.listWidth / 2,
       this.viewTop + this.viewHeight / 2,
     );
-    this.maskRect.setSize(this.listWidth, this.viewHeight);
+    this.maskRect!.setSize(this.listWidth, this.viewHeight);
   }
 
   private buildList() {
-    if (this.buildingList) return;
+    if (this.buildingList) {
+      this.pendingRelayout = true;
+      return;
+    }
     this.buildingList = true;
 
     try {
@@ -234,9 +251,11 @@ export class LeaderboardScene extends Phaser.Scene {
         }
         this.viewportContainer.removeAll(true);
         this.viewportContainer.destroy();
+        this.viewportContainer = undefined;
+        this.listContainer = undefined;
+        // Mask filter teardown can invalidate the geometry rect — recreate on next use.
+        if (!this.maskRect?.active) this.maskRect = undefined;
       }
-      this.viewportContainer = undefined;
-      this.listContainer = undefined;
 
       if (!this.loaded) {
         this.statusText.setText('Loading...').setVisible(true)
@@ -344,6 +363,10 @@ export class LeaderboardScene extends Phaser.Scene {
       this.backButton.text.setDepth(20);
     } finally {
       this.buildingList = false;
+      if (this.pendingRelayout) {
+        this.pendingRelayout = false;
+        this.buildList();
+      }
     }
   }
 
