@@ -12,8 +12,12 @@ export const difficultyConfig = {
   patternOpeningDelayMs: 1000,
   /** Display score below this skips multi-obstacle / high-tier patterns. */
   earlyGameScoreThreshold: 1000,
-  /** Extra breather distance multiplier while score is below earlyGameScoreThreshold. */
-  earlyBreatherGapMultiplier: 1.3,
+  /** Score at which breather spacing returns to normal (no gap multiplier). */
+  midGameScoreThreshold: 2000,
+  /** Breather gap multiplier while score is below earlyGameScoreThreshold. */
+  earlyBreatherGapMultiplier: 1.5,
+  /** Breather gap multiplier from earlyGameScoreThreshold up to midGameScoreThreshold. */
+  midBreatherGapMultiplier: 1.3,
   /** Breather gap (px) while score is still in the early band. */
   patternBreatherEarlyMin: 320,
   patternBreatherEarlyMax: 480,
